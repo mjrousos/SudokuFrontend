@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+
+  unit:
+    name: Unit & component tests
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:cov
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    needs: [unit, build]
+    # E2E requires the SudokuBackend repository to be checked out alongside
+    # this one (as ../SudokuBackend) and Docker available on the runner.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: SudokuFrontend
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/SudokuBackend
+          path: SudokuBackend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: SudokuFrontend/package-lock.json
+      - name: Install dependencies
+        working-directory: SudokuFrontend
+        run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('SudokuFrontend/package-lock.json') }}
+      - name: Install Playwright browsers
+        working-directory: SudokuFrontend
+        run: npx playwright install --with-deps chromium
+      - name: Start backend
+        working-directory: SudokuBackend
+        run: |
+          echo "Cors__AllowedOrigins__0=http://localhost:5173" >> .env
+          echo "Cors__AllowedOrigins__1=http://localhost:4173" >> .env
+          docker compose up -d --build
+      - name: Wait for backend
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1; then echo "Backend ready"; exit 0; fi
+            sleep 2
+          done
+          echo "Backend never became ready"; exit 1
+      - name: Run Playwright tests
+        working-directory: SudokuFrontend
+        env:
+          # Backend is brought up in the prior step; skip the duplicate
+          # docker-compose invocation inside globalSetup.
+          E2E_SKIP_BACKEND: '1'
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: SudokuFrontend/playwright-report/
