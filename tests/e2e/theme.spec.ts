@@ -11,11 +11,10 @@ import { expect, test } from './fixtures';
  * with the rest of the suite.
  */
 test.describe('Theme toggle', () => {
-  test.beforeEach(async ({ context }) => {
-    // Start every test from a clean slate so prior runs (or other tabs in
-    // the same browser context) can't bleed in.
-    await context.clearCookies();
-  });
+  // `fixtures.ts` (`context: async ({ browser, forwardedFor }, use)`)
+  // creates a fresh browser context for every test and closes it
+  // afterwards, so there is no cookie / localStorage carryover between
+  // tests — no per-test reset hook is needed here.
 
   test('cycles Light → Dark → System and applies the dark class on <html>', async ({ page }) => {
     // Force a deterministic OS preference so "system" resolves to light

@@ -20,7 +20,7 @@
  *   - the side effect (toggle `dark` class on `<html>` + set
  *     `style.colorScheme`)
  */
-import { computed, ref, watch, type ComputedRef, type Ref, type WatchStopHandle } from 'vue';
+import { computed, readonly, ref, watch, type ComputedRef, type Ref, type WatchStopHandle } from 'vue';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -30,8 +30,13 @@ const MEDIA_QUERY = '(prefers-color-scheme: dark)';
 const CYCLE: readonly ThemePreference[] = ['light', 'dark', 'system'] as const;
 
 interface ThemeState {
-  preference: Ref<ThemePreference>;
-  systemPrefersDark: Ref<boolean>;
+  // Refs are exposed as read-only so the only supported way to mutate
+  // theme state from outside this module is via `setPreference` /
+  // `cyclePreference`, which keep `localStorage` and the resolved DOM
+  // class in sync. Direct `preference.value = …` writes would bypass
+  // persistence and the OS re-read inside `setPreference`.
+  preference: Readonly<Ref<ThemePreference>>;
+  systemPrefersDark: Readonly<Ref<boolean>>;
   resolved: ComputedRef<ResolvedTheme>;
   setPreference: (next: ThemePreference) => void;
   cyclePreference: () => void;
@@ -138,8 +143,8 @@ function createState(): ThemeState {
   applyResolvedTheme(resolved.value);
 
   return {
-    preference,
-    systemPrefersDark,
+    preference: readonly(preference),
+    systemPrefersDark: readonly(systemPrefersDark),
     resolved,
     setPreference,
     cyclePreference,
