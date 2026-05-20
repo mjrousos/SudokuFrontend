@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,19 +22,40 @@ async function globalSetup(): Promise<void> {
     const backendPath = process.env.SUDOKU_BACKEND_PATH
       ?? path.resolve(__dirname, '..', '..', '..', 'SudokuBackend');
 
-    // Pass CORS origins so the preview (5173) and Vite dev (5173) work, plus
-    // the Playwright preview test URL. The compose env is overlaid by these.
-    const env = {
-      ...process.env,
-      Cors__AllowedOrigins__0: 'http://localhost:5173',
-      Cors__AllowedOrigins__1: 'http://localhost:4173',
-    };
+    // The SudokuBackend docker-compose.yml has no `env_file:` and only an
+    // explicit `environment:` block, so plain shell env vars never reach the
+    // container. Drop a dedicated compose file (`docker-compose.e2e.yml`)
+    // that injects what the api container needs and pass it explicitly with
+    // `-f` instead of relying on the auto-merged `docker-compose.override.yml`
+    // — that way we don't clobber a developer's local override file:
+    //
+    // * Cors__AllowedOrigins lets the browser at http://localhost:5173
+    //   (vite preview) call the api at http://localhost:8080.
+    //
+    // * ASPNETCORE_ENVIRONMENT=Testing flips the explicit escape hatches in
+    //   the backend's Program.cs that skip the per-remote-IP rate limiter
+    //   (which under docker's bridge network buckets every test to the same
+    //   gateway IP) and the HTTPS redirect.
+    const overridePath = path.join(backendPath, 'docker-compose.e2e.yml');
+    const overrideYaml = [
+      'services:',
+      '  api:',
+      '    environment:',
+      '      ASPNETCORE_ENVIRONMENT: Testing',
+      '      Cors__AllowedOrigins__0: http://localhost:5173',
+      '      Cors__AllowedOrigins__1: http://localhost:4173',
+      '',
+    ].join('\n');
+    fs.writeFileSync(overridePath, overrideYaml, 'utf8');
 
-    const result = spawnSync('docker', ['compose', 'up', '-d', '--build'], {
-      cwd: backendPath,
-      env,
-      stdio: 'inherit',
-    });
+    const result = spawnSync(
+      'docker',
+      ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.e2e.yml', 'up', '-d', '--build'],
+      {
+        cwd: backendPath,
+        stdio: 'inherit',
+      },
+    );
     if (result.status !== 0) {
       throw new Error(`docker compose up failed with exit code ${result.status}`);
     }

@@ -89,12 +89,44 @@ jobs:
       - name: Install Playwright browsers
         working-directory: SudokuFrontend
         run: npx playwright install --with-deps chromium
+      # Playwright's webServer runs `vite preview`, which requires a built dist/.
+      # Reuse the dist artifact uploaded by the `build` job instead of rebuilding.
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: SudokuFrontend/dist
       - name: Start backend
         working-directory: SudokuBackend
         run: |
-          echo "Cors__AllowedOrigins__0=http://localhost:5173" >> .env
-          echo "Cors__AllowedOrigins__1=http://localhost:4173" >> .env
-          docker compose up -d --build
+          # The SudokuBackend docker-compose.yml has no env_file, so a plain
+          # `.env` is only used by Compose for YAML interpolation and never
+          # reaches the container. Write a dedicated `docker-compose.e2e.yml`
+          # and pass it explicitly via `-f` rather than the auto-merged
+          # `docker-compose.override.yml`, to keep parity with the local dev
+          # helper (`scripts/ensure-backend.ps1`) and avoid implying we'd
+          # clobber a developer's local override file. This injects the env
+          # the api container needs:
+          #
+          # * Cors__AllowedOrigins lets the browser at http://localhost:5173
+          #   (vite preview) call the api at http://localhost:8080.
+          #
+          # * ASPNETCORE_ENVIRONMENT=Testing flips the explicit escape hatches
+          #   in Program.cs (`if (!app.Environment.IsEnvironment("Testing"))`)
+          #   that disable the per-remote-IP rate limiter and HTTPS redirect.
+          #   The rate limiter partitions by `Connection.RemoteIpAddress`,
+          #   which under docker's bridge network is the gateway IP for every
+          #   test — i.e. one shared bucket of 10 requests/minute. Disabling
+          #   it is what these E2E tests are designed to expect.
+          cat > docker-compose.e2e.yml <<'YAML'
+          services:
+            api:
+              environment:
+                ASPNETCORE_ENVIRONMENT: Testing
+                Cors__AllowedOrigins__0: http://localhost:5173
+                Cors__AllowedOrigins__1: http://localhost:4173
+          YAML
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
       - name: Wait for backend
         run: |
           for i in {1..60}; do
