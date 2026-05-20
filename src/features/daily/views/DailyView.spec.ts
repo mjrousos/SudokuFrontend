@@ -90,10 +90,10 @@ beforeEach(() => {
 });
 
 describe('DailyView', () => {
-  it('shows the sign-in prompt when unauthenticated and hides the play CTA', () => {
+  it('shows the anonymous play CTA and sign-in prompt when unauthenticated', () => {
     const wrapper = mountView();
 
-    expect(wrapper.find('[data-testid="play-today"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="play-today"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="sign-in-daily"]').exists()).toBe(true);
     expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({
       name: 'login',
@@ -114,6 +114,21 @@ describe('DailyView', () => {
     expect(pushMock).toHaveBeenCalledWith({
       name: 'play.game',
       params: { gameId: 'g-play' },
+    });
+  });
+
+  it('starts today when unauthenticated and routes to the game', async () => {
+    const daily = useDailyStore();
+    const startToday = vi.spyOn(daily, 'startToday').mockResolvedValue(makeGameViewModel('g-anon'));
+    const wrapper = mountView();
+
+    await wrapper.get('[data-testid="play-today"]').trigger('click');
+    await flushPromises();
+
+    expect(startToday).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith({
+      name: 'play.game',
+      params: { gameId: 'g-anon' },
     });
   });
 
