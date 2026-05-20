@@ -69,19 +69,29 @@ A typed `fetch` wrapper with an ordered interceptor pipeline. New backend
 calls go through `client.ts` (`installHttpClient` is called by the auth
 store at startup). Order matters:
 
-1. **Auth** — adds `Authorization: Bearer …` for protected calls. Skipped
-   on `/auth/*` so refresh/login don't recurse. Pass `anonymous: true` to
-   force-skip; `noRefresh: true` skips the 401 retry (used by the refresh
-   call itself).
+1. **Auth** — adds `Authorization: Bearer …` whenever an access token is
+   present, **unless** the caller passes `anonymous: true`. There is no
+   path-based special-casing; `/auth/*` endpoints opt out explicitly by
+   passing `anonymous: true` (see `src/features/auth/api/authApi.ts`).
+   `/auth/refresh` additionally passes `noRefresh: true` so a 401 on the
+   refresh call itself doesn't recurse into another refresh attempt.
 2. **Idempotency** — `Idempotency-Key` is a UUIDv4 generated for every
-   `POST/PUT/DELETE` and **memoized per logical call** so the refresh-retry
-   reuses the same key. Override with `idempotencyKey`.
+   mutating request (`POST/PUT/PATCH/DELETE` — see `MUTATING_METHODS` in
+   `httpClient.ts`) and **memoized per logical call** so the refresh-retry
+   reuses the same key. Pass `idempotencyKey: '<string>'` to supply your
+   own, or `idempotencyKey: null` to explicitly opt out.
 3. **ETag cache** — only `/users` and `/leaderboards` GETs participate
    (`isCacheable` in `httpClient.ts`). Entries are `{ etag, body,
-   authIdentity }`; `authIdentity` scopes the cache so a different
-   logged-in user can't read a previous user's cached body. **Cleared on
-   login, logout, and `token_reused`** — if you add another auth-state
-   transition, clear `etagCache` too.
+   authIdentity }`; on lookup, a mismatched `authIdentity` evicts the
+   entry and misses, so a different logged-in user (or an anonymous
+   visitor) can't read a previous user's cached body. The cache is
+   **fully cleared** on `logout()` and `forceLogout()` (covering
+   `manual`, `session_expired`, and `token_reused`) via
+   `clearStateLocally`, and on a user-identity switch in `applyTokens`
+   (when `user.value.userId` changes). An initial login from an
+   anonymous state relies on the per-entry identity-mismatch eviction
+   rather than a full flush. If you add another auth-state transition
+   that should drop cached bodies, call `etagCache.clear()` explicitly.
 4. **Refresh-on-401** — single-flight, **cross-tab** via `navigator.locks`
    (with a localStorage-mutex fallback) and a `BroadcastChannel`. See
    `src/shared/auth/crossTabRefresh.ts` and `authStore.refreshAccessToken`.
