@@ -24,8 +24,10 @@ async function globalSetup(): Promise<void> {
 
     // The SudokuBackend docker-compose.yml has no `env_file:` and only an
     // explicit `environment:` block, so plain shell env vars never reach the
-    // container. Drop a compose override (auto-merged by `docker compose up`)
-    // that injects what the api container needs:
+    // container. Drop a dedicated compose file (`docker-compose.e2e.yml`)
+    // that injects what the api container needs and pass it explicitly with
+    // `-f` instead of relying on the auto-merged `docker-compose.override.yml`
+    // — that way we don't clobber a developer's local override file:
     //
     // * Cors__AllowedOrigins lets the browser at http://localhost:5173
     //   (vite preview) call the api at http://localhost:8080.
@@ -34,7 +36,7 @@ async function globalSetup(): Promise<void> {
     //   the backend's Program.cs that skip the per-remote-IP rate limiter
     //   (which under docker's bridge network buckets every test to the same
     //   gateway IP) and the HTTPS redirect.
-    const overridePath = path.join(backendPath, 'docker-compose.override.yml');
+    const overridePath = path.join(backendPath, 'docker-compose.e2e.yml');
     const overrideYaml = [
       'services:',
       '  api:',
@@ -46,10 +48,14 @@ async function globalSetup(): Promise<void> {
     ].join('\n');
     fs.writeFileSync(overridePath, overrideYaml, 'utf8');
 
-    const result = spawnSync('docker', ['compose', 'up', '-d', '--build'], {
-      cwd: backendPath,
-      stdio: 'inherit',
-    });
+    const result = spawnSync(
+      'docker',
+      ['compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.e2e.yml', 'up', '-d', '--build'],
+      {
+        cwd: backendPath,
+        stdio: 'inherit',
+      },
+    );
     if (result.status !== 0) {
       throw new Error(`docker compose up failed with exit code ${result.status}`);
     }

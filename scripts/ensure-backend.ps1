@@ -17,8 +17,10 @@ Push-Location $BackendPath
 try {
     # The SudokuBackend docker-compose.yml has no `env_file:` and only an
     # explicit `environment:` block, so plain shell env vars are NOT
-    # forwarded into the container. Use a compose override (auto-merged by
-    # `docker compose up`) to inject what the api container needs:
+    # forwarded into the container. Write a dedicated `docker-compose.e2e.yml`
+    # and pass it explicitly with `-f` instead of relying on the auto-merged
+    # `docker-compose.override.yml` — that way we don't clobber a developer's
+    # local override file:
     #
     # * Cors__AllowedOrigins lets the browser at http://localhost:5173
     #   (vite preview) call the api at http://localhost:8080.
@@ -35,10 +37,10 @@ services:
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: http://localhost:4173
 '@
-    Set-Content -Path (Join-Path $BackendPath 'docker-compose.override.yml') -Value $override -Encoding UTF8
+    Set-Content -Path (Join-Path $BackendPath 'docker-compose.e2e.yml') -Value $override -Encoding UTF8
 
     Write-Host "Starting backend in $BackendPath"
-    docker compose up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 
     Write-Host "Waiting for /health/ready..."
     $deadline = (Get-Date).AddSeconds(120)
