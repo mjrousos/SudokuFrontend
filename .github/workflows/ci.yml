@@ -89,6 +89,10 @@ jobs:
       - name: Install Playwright browsers
         working-directory: SudokuFrontend
         run: npx playwright install --with-deps chromium
+      # Playwright's webServer runs `vite preview`, which requires a built dist/.
+      - name: Build frontend
+        working-directory: SudokuFrontend
+        run: npm run build
       - name: Start backend
         working-directory: SudokuBackend
         run: |
