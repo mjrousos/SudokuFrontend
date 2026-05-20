@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,17 +22,24 @@ async function globalSetup(): Promise<void> {
     const backendPath = process.env.SUDOKU_BACKEND_PATH
       ?? path.resolve(__dirname, '..', '..', '..', 'SudokuBackend');
 
-    // Pass CORS origins so the preview (5173) and Vite dev (5173) work, plus
-    // the Playwright preview test URL. The compose env is overlaid by these.
-    const env = {
-      ...process.env,
-      Cors__AllowedOrigins__0: 'http://localhost:5173',
-      Cors__AllowedOrigins__1: 'http://localhost:4173',
-    };
+    // The SudokuBackend docker-compose.yml has no `env_file:` and only an
+    // explicit `environment:` block, so plain shell env vars never reach the
+    // container. Drop a compose override (auto-merged by `docker compose up`)
+    // that injects the CORS origins for the preview (4173) and dev (5173)
+    // servers into the api service.
+    const overridePath = path.join(backendPath, 'docker-compose.override.yml');
+    const overrideYaml = [
+      'services:',
+      '  api:',
+      '    environment:',
+      '      Cors__AllowedOrigins__0: http://localhost:5173',
+      '      Cors__AllowedOrigins__1: http://localhost:4173',
+      '',
+    ].join('\n');
+    fs.writeFileSync(overridePath, overrideYaml, 'utf8');
 
     const result = spawnSync('docker', ['compose', 'up', '-d', '--build'], {
       cwd: backendPath,
-      env,
       stdio: 'inherit',
     });
     if (result.status !== 0) {

@@ -15,8 +15,18 @@ if (-not $BackendPath -or -not (Test-Path $BackendPath)) {
 
 Push-Location $BackendPath
 try {
-    $env:Cors__AllowedOrigins__0 = 'http://localhost:5173'
-    $env:Cors__AllowedOrigins__1 = 'http://localhost:4173'
+    # The SudokuBackend docker-compose.yml has no `env_file:` and only an
+    # explicit `environment:` block, so plain shell env vars are NOT
+    # forwarded into the container. Use a compose override (auto-merged by
+    # `docker compose up`) to inject the CORS origins the frontend needs.
+    $override = @'
+services:
+  api:
+    environment:
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:4173
+'@
+    Set-Content -Path (Join-Path $BackendPath 'docker-compose.override.yml') -Value $override -Encoding UTF8
 
     Write-Host "Starting backend in $BackendPath"
     docker compose up -d --build

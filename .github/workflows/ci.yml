@@ -96,8 +96,18 @@ jobs:
       - name: Start backend
         working-directory: SudokuBackend
         run: |
-          echo "Cors__AllowedOrigins__0=http://localhost:5173" >> .env
-          echo "Cors__AllowedOrigins__1=http://localhost:4173" >> .env
+          # The SudokuBackend docker-compose.yml has no env_file, so a plain
+          # `.env` is only used by Compose for YAML interpolation and never
+          # reaches the container. Use a compose override (auto-merged by
+          # `docker compose up`) to inject the CORS origins for the preview
+          # (4173) and dev (5173) servers into the api service.
+          cat > docker-compose.override.yml <<'YAML'
+          services:
+            api:
+              environment:
+                Cors__AllowedOrigins__0: http://localhost:5173
+                Cors__AllowedOrigins__1: http://localhost:4173
+          YAML
           docker compose up -d --build
       - name: Wait for backend
         run: |
