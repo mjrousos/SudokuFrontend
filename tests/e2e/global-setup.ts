@@ -25,13 +25,21 @@ async function globalSetup(): Promise<void> {
     // The SudokuBackend docker-compose.yml has no `env_file:` and only an
     // explicit `environment:` block, so plain shell env vars never reach the
     // container. Drop a compose override (auto-merged by `docker compose up`)
-    // that injects the CORS origins for the preview (4173) and dev (5173)
-    // servers into the api service.
+    // that injects what the api container needs:
+    //
+    // * Cors__AllowedOrigins lets the browser at http://localhost:5173
+    //   (vite preview) call the api at http://localhost:8080.
+    //
+    // * ASPNETCORE_ENVIRONMENT=Testing flips the explicit escape hatches in
+    //   the backend's Program.cs that skip the per-remote-IP rate limiter
+    //   (which under docker's bridge network buckets every test to the same
+    //   gateway IP) and the HTTPS redirect.
     const overridePath = path.join(backendPath, 'docker-compose.override.yml');
     const overrideYaml = [
       'services:',
       '  api:',
       '    environment:',
+      '      ASPNETCORE_ENVIRONMENT: Testing',
       '      Cors__AllowedOrigins__0: http://localhost:5173',
       '      Cors__AllowedOrigins__1: http://localhost:4173',
       '',

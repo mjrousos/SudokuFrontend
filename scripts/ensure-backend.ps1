@@ -18,11 +18,20 @@ try {
     # The SudokuBackend docker-compose.yml has no `env_file:` and only an
     # explicit `environment:` block, so plain shell env vars are NOT
     # forwarded into the container. Use a compose override (auto-merged by
-    # `docker compose up`) to inject the CORS origins the frontend needs.
+    # `docker compose up`) to inject what the api container needs:
+    #
+    # * Cors__AllowedOrigins lets the browser at http://localhost:5173
+    #   (vite preview) call the api at http://localhost:8080.
+    #
+    # * ASPNETCORE_ENVIRONMENT=Testing flips the explicit escape hatches in
+    #   Program.cs that skip the per-remote-IP rate limiter (which under
+    #   docker's bridge network would bucket every test to the same gateway
+    #   IP) and the HTTPS redirect.
     $override = @'
 services:
   api:
     environment:
+      ASPNETCORE_ENVIRONMENT: Testing
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: http://localhost:4173
 '@

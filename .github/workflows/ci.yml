@@ -99,12 +99,23 @@ jobs:
           # The SudokuBackend docker-compose.yml has no env_file, so a plain
           # `.env` is only used by Compose for YAML interpolation and never
           # reaches the container. Use a compose override (auto-merged by
-          # `docker compose up`) to inject the CORS origins for the preview
-          # (4173) and dev (5173) servers into the api service.
+          # `docker compose up`) to inject the env the api container needs:
+          #
+          # * Cors__AllowedOrigins lets the browser at http://localhost:5173
+          #   (vite preview) call the api at http://localhost:8080.
+          #
+          # * ASPNETCORE_ENVIRONMENT=Testing flips the explicit escape hatches
+          #   in Program.cs (`if (!app.Environment.IsEnvironment("Testing"))`)
+          #   that disable the per-remote-IP rate limiter and HTTPS redirect.
+          #   The rate limiter partitions by `Connection.RemoteIpAddress`,
+          #   which under docker's bridge network is the gateway IP for every
+          #   test — i.e. one shared bucket of 10 requests/minute. Disabling
+          #   it is what these E2E tests are designed to expect.
           cat > docker-compose.override.yml <<'YAML'
           services:
             api:
               environment:
+                ASPNETCORE_ENVIRONMENT: Testing
                 Cors__AllowedOrigins__0: http://localhost:5173
                 Cors__AllowedOrigins__1: http://localhost:4173
           YAML
