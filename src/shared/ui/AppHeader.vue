@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
 import AppButton from '@/shared/ui/AppButton.vue';
+import ThemeToggle from '@/shared/ui/ThemeToggle.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -36,6 +37,7 @@ async function onLogout() {
         </template>
       </nav>
       <div class="flex items-center gap-2">
+        <ThemeToggle />
         <template v-if="auth.isAuthenticated">
           <RouterLink
             :to="{ name: 'profile' }"

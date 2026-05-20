@@ -11,6 +11,12 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http: https:; base-uri 'self'; frame-ancestors 'none';"
     />
+    <!-- Theme initializer must run BEFORE the app mounts so the saved
+         preference is applied to <html> with no flash of the wrong theme.
+         CSP disallows inline scripts, so this lives in /public and is
+         referenced as an external file. Kept in sync with
+         src/shared/composables/useTheme.ts. -->
+    <script src="/theme-init.js"></script>
     <title>Sudoku</title>
   </head>
   <body>

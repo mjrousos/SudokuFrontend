@@ -14,7 +14,8 @@ leaderboards, and manage their account.
 - **Vue 3** (Composition API, `<script setup>`) + **TypeScript** (strict)
 - **Vite** for dev / build / preview
 - **Pinia** for state, **Vue Router 4** for routing
-- **Tailwind CSS** for styling (dark mode via `class` strategy)
+- **Tailwind CSS** for styling (dark mode via `class` strategy with a
+  Light / Dark / System toggle — see [Theming](#theming) below)
 - **VeeValidate + Zod** for typed form validation
 - **Vitest + @vue/test-utils + MSW + happy-dom** for unit & component tests
 - **Playwright** for end-to-end tests
@@ -131,6 +132,35 @@ server's `MoveResponse.evaluation` is either `Consistent` or
 the same row/col/box"* and **not** *"this digit is wrong vs. the solution"*.
 The UI surfaces conflicts but only the final `POST /games/{id}/solution`
 call tells us whether the user has actually solved the puzzle.
+
+### Theming
+
+The app ships with a tri-state theme toggle (Light / Dark / **System**,
+default) wired into both the main header and the auth-screen layout. The
+implementation has three parts:
+
+- **`public/theme-init.js`** — a tiny dependency-free script referenced
+  from `<head>` in `index.html`. Runs synchronously before the app
+  mounts, reads the saved preference from `localStorage['sudoku.theme']`,
+  resolves `system` against `prefers-color-scheme`, and applies the
+  `dark` class on `<html>` plus `style.colorScheme`. This eliminates the
+  flash of the wrong theme on reload. It is a separate file (not inline)
+  because the CSP uses `script-src 'self'` with no nonce.
+- **`src/shared/composables/useTheme.ts`** — module-level singleton that
+  exposes the current `preference`, the `resolved` `'light'`/`'dark'`,
+  `setPreference`, and `cyclePreference`. Listens to
+  `matchMedia('(prefers-color-scheme: dark)')` so the page updates live
+  when the OS theme changes (only while preference is `'system'`).
+  Initialized once from `main.ts`.
+- **`src/shared/ui/ThemeToggle.vue`** — single-button cycler used in
+  `AppHeader.vue` and `AuthLayout.vue`. Carries
+  `data-testid="theme-toggle"` plus `data-theme-preference` and
+  `data-theme-resolved` for Playwright.
+
+The storage key is **`sudoku.theme`** and values are `'light' | 'dark' |
+'system'`; anything else is treated as `'system'`. If `localStorage`
+throws (Safari private mode, disabled storage), the toggle still works
+in-memory for the session.
 
 ## Out of scope
 
