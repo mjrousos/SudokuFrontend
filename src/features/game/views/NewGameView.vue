@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 
 import AppButton from '@/shared/ui/AppButton.vue';
 import AppSpinner from '@/shared/ui/AppSpinner.vue';
@@ -12,10 +12,12 @@ import {
   GameMode,
 } from '@/shared/api/types';
 import { useGamesStore } from '@/features/game/store/gamesStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 const router = useRouter();
 const games = useGamesStore();
 const toasts = useToastStore();
+const auth = useAuthStore();
 
 const mode = ref<GameMode>(GameMode.Practice);
 const difficulty = ref<Difficulty>(Difficulty.Easy);
@@ -51,6 +53,14 @@ async function startGame(): Promise<void> {
         Practice freely or try Ranked for a chance to make the leaderboard.
       </p>
     </header>
+
+    <p v-if="!auth.isAuthenticated" class="text-sm text-slate-600 dark:text-slate-300" data-testid="anon-notice">
+      You&#39;re playing as a guest.
+      <RouterLink :to="{ name: 'login', query: { redirectTo: '/play' } }" class="text-blue-600 underline hover:text-blue-700 dark:text-blue-400">
+        Sign in
+      </RouterLink>
+      to have your scores tracked and appear on the leaderboard.
+    </p>
 
     <form class="space-y-5" @submit.prevent="startGame">
       <fieldset>
