@@ -18,6 +18,7 @@ on:
 if: >
   github.event.pull_request.draft == true &&
   !contains(github.event.pull_request.title, '[WIP]') &&
+  github.event.changes.title &&
   contains(github.event.changes.title.from, '[WIP]')
 
 permissions:
