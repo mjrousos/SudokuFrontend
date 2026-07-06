@@ -31,6 +31,10 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
+  # Request the Copilot reviewer with a user-owned PAT: assigning the reviewer via
+  # github-actions[bot] (the default GITHUB_TOKEN) does not reliably start a Copilot
+  # review. See copilot-mark-ready.md / README for the GH_AW_GITHUB_TOKEN PAT.
+  github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
   add-reviewer:
     allowed-reviewers: [copilot]
     max: 1

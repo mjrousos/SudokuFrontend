@@ -82,6 +82,16 @@ These are independent and easy to conflate:
    mark ready. Default = the workflow's scoped `GITHUB_TOKEN`. Whether that is *sufficient
    to wake Copilot* is decided by **V2/V3**, not assumed.
 
+> **UPDATE (post-merge, PR #17 in production):** V2/V3 confirmed the negative case —
+> write actions performed by the default `GITHUB_TOKEN` (i.e. `github-actions[bot]`) do
+> **not** wake the Copilot coding agent or reliably start a Copilot review. The three
+> workflows were switched to perform all GitHub read/write through a user-owned
+> **`GH_AW_GITHUB_TOKEN`** PAT (explicit `safe-outputs.github-token`), with **no**
+> `GITHUB_TOKEN` fallback so a missing/misconfigured PAT fails loudly instead of silently
+> reverting to the bot. Inference stays on `copilot-requests: write` (V1 confirmed working
+> in CI). Required PAT scopes: Pull requests R/W, Issues R/W, Contents R — owner must have
+> a Copilot license. Activation/reactions still use the built-in `GITHUB_TOKEN`.
+
 Note on loop propagation: our own safe-output writes use `GITHUB_TOKEN`, which does not
 start new Actions runs (built-in loop guard). The loop only continues because Copilot's
 **separate** systems (coding agent, reviewer) author **real** (non-`GITHUB_TOKEN`) events

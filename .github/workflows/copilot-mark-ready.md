@@ -37,6 +37,14 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
+  # Safe-output write actions (mark ready, add reviewer) run in a separate,
+  # permission-scoped job. Perform them with a user-owned PAT rather than the
+  # default GITHUB_TOKEN: actions authored by github-actions[bot] cannot wake the
+  # Copilot coding agent or reliably request the Copilot reviewer. GH_AW_GITHUB_TOKEN
+  # is gh-aw's recognized secret for GitHub write operations (see README). This is
+  # separate from `copilot-requests: write` above, which only authenticates model
+  # inference — the two tokens are independent.
+  github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
   mark-pull-request-as-ready-for-review:
     max: 1
   # Request the first Copilot review now: this workflow's "ready_for_review" event is
