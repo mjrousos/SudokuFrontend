@@ -1,10 +1,15 @@
 ---
 description: |
-  When new commits are pushed to a non-draft pull request, request the Copilot reviewer.
-  Skips stale pushes, PRs where Copilot is already a requested reviewer, and PRs flagged
-  loop-exhausted.
+  When new commits are pushed to a non-draft pull request — or a draft becomes ready
+  (a human clicks "Ready for review", or copilot-mark-ready marks it ready via its
+  PAT-authored event) — request the Copilot reviewer. Skips stale pushes, PRs where
+  Copilot is already a requested reviewer, and PRs flagged loop-exhausted.
 on:
   pull_request:
+    # synchronize = new commits pushed; ready_for_review = a draft became ready, whether
+    # a human clicked "Ready for review" or copilot-mark-ready marked it ready with its
+    # PAT (a real-user event that chains here). This workflow is the single owner of
+    # Copilot reviewer requests.
     types: [synchronize, ready_for_review]
   reaction: eyes
   # Allow the Copilot coding agent's fix-pushes (during the review/fix loop) to trigger
@@ -31,6 +36,10 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
+  # Request the Copilot reviewer with a user-owned PAT: assigning the reviewer via
+  # github-actions[bot] (the default GITHUB_TOKEN) does not reliably start a Copilot
+  # review. See copilot-mark-ready.md / README for the GH_AW_GITHUB_TOKEN PAT.
+  github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
   add-reviewer:
     allowed-reviewers: [copilot]
     max: 1

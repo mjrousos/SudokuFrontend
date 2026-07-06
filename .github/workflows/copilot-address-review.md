@@ -32,6 +32,11 @@ tools:
     toolsets: [pull_requests, repos, issues]
 
 safe-outputs:
+  # Perform write actions (comment mentioning @copilot, labels) with a user-owned
+  # PAT. A comment authored by github-actions[bot] does not wake the Copilot coding
+  # agent, so the default GITHUB_TOKEN cannot drive the review→fix loop. See
+  # copilot-mark-ready.md / README for the GH_AW_GITHUB_TOKEN PAT and its scopes.
+  github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
   add-comment:
     max: 1
   add-labels:

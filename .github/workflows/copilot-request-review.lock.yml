@@ -1,4 +1,4 @@
-# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"526eed810d5364376bc372172e84082bf7fcbae374260f85467602472f876fbe","body_hash":"50ef1e96ba68d493a3f63f9364a6d66a2a2ef3d9adf26fea4dde5ed95bfa62d3","compiler_version":"v0.77.5","strict":true,"agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v4","frontmatter_hash":"982823af93f50700d3145f4c589ad4f9e5ca040a11acd897a561527b49080e41","body_hash":"50ef1e96ba68d493a3f63f9364a6d66a2a2ef3d9adf26fea4dde5ed95bfa62d3","compiler_version":"v0.77.5","strict":true,"agent_id":"copilot"}
 # gh-aw-manifest: {"version":1,"secrets":["GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"v6.0.2"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-node","sha":"48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e","version":"v6.4.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"3ea13c02d765410340d533515cb31a7eef2baaf0","version":"v0.77.5"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.25.58"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.25.58"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.25.58"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.3.22"},{"image":"ghcr.io/github/github-mcp-server:v1.1.0"},{"image":"node:lts-alpine","digest":"sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14","pinned_image":"node:lts-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14"}]}
 #    ___                   _   _      
 #   / _ \                 | | (_)     
@@ -22,9 +22,10 @@
 #
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
-# When new commits are pushed to a non-draft pull request, request the Copilot reviewer.
-# Skips stale pushes, PRs where Copilot is already a requested reviewer, and PRs flagged
-# loop-exhausted.
+# When new commits are pushed to a non-draft pull request — or a draft becomes ready
+# (a human clicks "Ready for review", or copilot-mark-ready marks it ready via its
+# PAT-authored event) — request the Copilot reviewer. Skips stale pushes, PRs where
+# Copilot is already a requested reviewer, and PRs flagged loop-exhausted.
 #
 # Secrets used:
 #   - GH_AW_GITHUB_MCP_SERVER_TOKEN
@@ -218,20 +219,20 @@ jobs:
         run: |
           bash "${RUNNER_TEMP}/gh-aw/actions/create_prompt_first.sh"
           {
-          cat << 'GH_AW_PROMPT_fb44e8006ae853f4_EOF'
+          cat << 'GH_AW_PROMPT_e09d1649cb16bcce_EOF'
           <system>
-          GH_AW_PROMPT_fb44e8006ae853f4_EOF
+          GH_AW_PROMPT_e09d1649cb16bcce_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/xpia.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/temp_folder_prompt.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/markdown.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/safe_outputs_prompt.md"
-          cat << 'GH_AW_PROMPT_fb44e8006ae853f4_EOF'
+          cat << 'GH_AW_PROMPT_e09d1649cb16bcce_EOF'
           <safe-output-tools>
           Tools: add_reviewer, missing_tool, missing_data, noop
           </safe-output-tools>
-          GH_AW_PROMPT_fb44e8006ae853f4_EOF
+          GH_AW_PROMPT_e09d1649cb16bcce_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/mcp_cli_tools_prompt.md"
-          cat << 'GH_AW_PROMPT_fb44e8006ae853f4_EOF'
+          cat << 'GH_AW_PROMPT_e09d1649cb16bcce_EOF'
           <github-context>
           The following GitHub context information is available for this workflow:
           {{#if github.actor}}
@@ -260,12 +261,12 @@ jobs:
           {{/if}}
           </github-context>
           
-          GH_AW_PROMPT_fb44e8006ae853f4_EOF
+          GH_AW_PROMPT_e09d1649cb16bcce_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/github_mcp_tools_with_safeoutputs_prompt.md"
-          cat << 'GH_AW_PROMPT_fb44e8006ae853f4_EOF'
+          cat << 'GH_AW_PROMPT_e09d1649cb16bcce_EOF'
           </system>
           {{#runtime-import .github/workflows/copilot-request-review.md}}
-          GH_AW_PROMPT_fb44e8006ae853f4_EOF
+          GH_AW_PROMPT_e09d1649cb16bcce_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -432,9 +433,9 @@ jobs:
           github.event.pull_request || github.event.issue.pull_request
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_MCP_SERVER_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -483,9 +484,9 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/gh-aw/safeoutputs"
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
-          cat > "${RUNNER_TEMP}/gh-aw/safeoutputs/config.json" << 'GH_AW_SAFE_OUTPUTS_CONFIG_9acb8f860176b34c_EOF'
+          cat > "${RUNNER_TEMP}/gh-aw/safeoutputs/config.json" << 'GH_AW_SAFE_OUTPUTS_CONFIG_90e082e00af5d6ed_EOF'
           {"add_reviewer":{"allowed":["copilot"],"max":1},"create_report_incomplete_issue":{},"missing_data":{},"missing_tool":{},"noop":{"max":1,"report-as-issue":"true"},"report_incomplete":{}}
-          GH_AW_SAFE_OUTPUTS_CONFIG_9acb8f860176b34c_EOF
+          GH_AW_SAFE_OUTPUTS_CONFIG_90e082e00af5d6ed_EOF
       - name: Generate Safe Outputs Tools
         env:
           GH_AW_TOOLS_META_JSON: |
@@ -682,7 +683,7 @@ jobs:
           
           mkdir -p /home/runner/.copilot
           GH_AW_NODE=$(which node 2>/dev/null || command -v node 2>/dev/null || echo node)
-          cat << GH_AW_MCP_CONFIG_95d7d399d41913c3_EOF | "$GH_AW_NODE" "${RUNNER_TEMP}/gh-aw/actions/start_mcp_gateway.cjs"
+          cat << GH_AW_MCP_CONFIG_4d99057bd00314bd_EOF | "$GH_AW_NODE" "${RUNNER_TEMP}/gh-aw/actions/start_mcp_gateway.cjs"
           {
             "mcpServers": {
               "github": {
@@ -723,7 +724,7 @@ jobs:
               "payloadDir": "${MCP_GATEWAY_PAYLOAD_DIR}"
             }
           }
-          GH_AW_MCP_CONFIG_95d7d399d41913c3_EOF
+          GH_AW_MCP_CONFIG_4d99057bd00314bd_EOF
       - name: Mount MCP servers as CLIs
         id: mount-mcp-clis
         continue-on-error: true
@@ -1024,7 +1025,7 @@ jobs:
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_NOOP_REPORT_AS_ISSUE: "true"
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -1041,7 +1042,7 @@ jobs:
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
           GH_AW_DETECTION_REASON: ${{ needs.detection.outputs.detection_reason }}
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -1056,7 +1057,7 @@ jobs:
           GH_AW_WORKFLOW_NAME: "Request a Copilot review on a non-draft PR"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/copilot-request-review.md"
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -1071,7 +1072,7 @@ jobs:
           GH_AW_WORKFLOW_NAME: "Request a Copilot review on a non-draft PR"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/copilot-request-review.md"
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -1107,7 +1108,7 @@ jobs:
           GH_AW_TIMEOUT_MINUTES: "10"
           GH_AW_MAX_EFFECTIVE_TOKENS: "25000000"
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);
@@ -1211,7 +1212,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           WORKFLOW_NAME: "Request a Copilot review on a non-draft PR"
-          WORKFLOW_DESCRIPTION: "When new commits are pushed to a non-draft pull request, request the Copilot reviewer.\nSkips stale pushes, PRs where Copilot is already a requested reviewer, and PRs flagged\nloop-exhausted."
+          WORKFLOW_DESCRIPTION: "When new commits are pushed to a non-draft pull request — or a draft becomes ready\n(a human clicks \"Ready for review\", or copilot-mark-ready marks it ready via its\nPAT-authored event) — request the Copilot reviewer. Skips stale pushes, PRs where\nCopilot is already a requested reviewer, and PRs flagged loop-exhausted."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |
@@ -1449,7 +1450,7 @@ jobs:
           GITHUB_API_URL: ${{ github.api_url }}
           GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_reviewer\":{\"allowed\":[\"copilot\"],\"max\":1},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"true\"},\"report_incomplete\":{}}"
         with:
-          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io, getOctokit);

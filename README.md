@@ -182,8 +182,8 @@ pulled in:
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `copilot-mark-ready` | `[WIP]` removed from a **draft** PR title | Marks the PR ready for review and requests the first Copilot review |
-| `copilot-request-review` | New commits pushed to a **non-draft** PR | Requests the Copilot reviewer |
+| `copilot-mark-ready` | `[WIP]` removed from a **draft** PR title | Marks the PR ready for review (which triggers `copilot-request-review` to request the reviewer) |
+| `copilot-request-review` | New commits pushed to a **non-draft** PR, or a draft becomes ready | Requests the Copilot reviewer |
 | `copilot-address-review` | Copilot reviewer submits a review | If changes are requested, asks `@copilot` to address them; stays silent on clean reviews |
 
 Together they form a loop — review → fix → re-review — until the review comes
@@ -195,7 +195,30 @@ after **3 rounds** and applies the **`copilot-loop-exhausted`** and
 **Reset:** remove the `copilot-loop-exhausted` label to resume automation on the
 next push.
 
-> **Setup:** the workflows apply (but do not create) the `copilot-loop-exhausted`
+### Required secret: `GH_AW_GITHUB_TOKEN`
+
+These workflows perform their write actions (mark ready, request the Copilot
+reviewer, comment `@copilot`, apply labels) through a **user-owned PAT**, not the
+default `GITHUB_TOKEN`. A comment or reviewer request authored by
+`github-actions[bot]` does **not** wake the Copilot coding agent or reliably
+start a Copilot review, so the bot token cannot drive the review→fix loop.
+
+gh-aw uses the `GH_AW_GITHUB_TOKEN` secret for GitHub read/write operations
+(model inference is separate — it uses `copilot-requests: write`). Create a
+**fine-grained PAT owned by a user account with a Copilot license and write
+access to this repo**, with these repository permissions, and store it as the
+`GH_AW_GITHUB_TOKEN` repository secret:
+
+- **Pull requests: Read and write** — mark ready, add reviewer, PR comments
+- **Issues: Read and write** — labels (and PR comments, which use the issues API)
+- **Contents: Read** — read repository content
+
+The workflows reference this secret explicitly, so if it is missing the
+safe-output jobs fail loudly (rather than silently falling back to the bot).
+Repository triggering, reactions, and status comments still use the built-in
+`GITHUB_TOKEN`.
+
+> **Labels:** the workflows apply (but do not create) the `copilot-loop-exhausted`
 > and `needs-human-review` labels, so both must exist in the repo. They have
 > already been created here; in a new repo run
 > `gh label create copilot-loop-exhausted` and `gh label create needs-human-review`.
