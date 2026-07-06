@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { RouterLink } from 'vue-router';
 
 import AppButton from '@/shared/ui/AppButton.vue';
 import AppModal from '@/shared/ui/AppModal.vue';
 import { formatElapsed } from '@/shared/composables/useTimer';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 interface Props {
   open: boolean;
@@ -20,8 +22,14 @@ const emit = defineEmits<{
   (e: 'new-game'): void;
 }>();
 
+const auth = useAuthStore();
+
 const elapsedLabel = computed(() =>
   props.elapsedMs !== null ? formatElapsed(props.elapsedMs) : '—',
+);
+
+const showSignInPrompt = computed(
+  () => props.isCorrect && !props.leaderboardEntryCreated && !auth.isAuthenticated,
 );
 </script>
 
@@ -54,6 +62,18 @@ const elapsedLabel = computed(() =>
         <dd>Entry recorded ✔</dd>
       </div>
     </dl>
+    <p
+      v-if="showSignInPrompt"
+      class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+      data-testid="completion-sign-in-prompt"
+    >
+      <RouterLink
+        :to="{ name: 'login' }"
+        class="font-medium underline"
+        @click="emit('close')"
+      >Sign in</RouterLink>
+      to record your scores on the leaderboard.
+    </p>
     <template #footer>
       <AppButton variant="secondary" @click="emit('close')">Close</AppButton>
       <AppButton

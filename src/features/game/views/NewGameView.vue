@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 
 import AppButton from '@/shared/ui/AppButton.vue';
 import AppSpinner from '@/shared/ui/AppSpinner.vue';
@@ -12,10 +12,12 @@ import {
   GameMode,
 } from '@/shared/api/types';
 import { useGamesStore } from '@/features/game/store/gamesStore';
+import { useAuthStore } from '@/features/auth/store/authStore';
 
 const router = useRouter();
 const games = useGamesStore();
 const toasts = useToastStore();
+const auth = useAuthStore();
 
 const mode = ref<GameMode>(GameMode.Practice);
 const difficulty = ref<Difficulty>(Difficulty.Easy);
@@ -94,6 +96,18 @@ async function startGame(): Promise<void> {
           </label>
         </div>
       </fieldset>
+
+      <p
+        v-if="!auth.isAuthenticated"
+        class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+        data-testid="anon-notice"
+      >
+        Playing without an account — your scores won't appear on the leaderboard.
+        <RouterLink :to="{ name: 'login', query: { redirectTo: '/play' } }" class="font-medium underline">
+          Sign in
+        </RouterLink>
+        to track your progress.
+      </p>
 
       <p v-if="error" class="text-sm text-rose-600" role="alert" data-testid="newgame-error">
         {{ error }}
