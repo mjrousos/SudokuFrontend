@@ -1,7 +1,9 @@
 ---
 description: |
   When Copilot finishes a draft PR and removes the [WIP] prefix from its title,
-  promote the PR from draft to ready-for-review and request the first Copilot review.
+  promote the PR from draft to ready-for-review. The resulting PAT-authored
+  ready_for_review event then triggers copilot-request-review to request the
+  Copilot reviewer.
 on:
   pull_request:
     types: [edited]
@@ -37,21 +39,16 @@ tools:
     toolsets: [pull_requests, repos]
 
 safe-outputs:
-  # Safe-output write actions (mark ready, add reviewer) run in a separate,
-  # permission-scoped job. Perform them with a user-owned PAT rather than the
-  # default GITHUB_TOKEN: actions authored by github-actions[bot] cannot wake the
-  # Copilot coding agent or reliably request the Copilot reviewer. GH_AW_GITHUB_TOKEN
-  # is gh-aw's recognized secret for GitHub write operations (see README). This is
-  # separate from `copilot-requests: write` above, which only authenticates model
-  # inference — the two tokens are independent.
+  # The mark-ready write runs in a separate, permission-scoped job. Perform it with a
+  # user-owned PAT rather than the default GITHUB_TOKEN for two reasons: (1) a
+  # github-actions[bot]-authored action can't drive Copilot, and (2) a PAT-authored
+  # "ready_for_review" event is a real user event, so it chains to copilot-request-review
+  # (which requests the Copilot reviewer). A GITHUB_TOKEN-authored ready event would not
+  # trigger that workflow. GH_AW_GITHUB_TOKEN is gh-aw's recognized secret for GitHub
+  # write operations (see README); it is separate from `copilot-requests: write` above,
+  # which only authenticates model inference.
   github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
   mark-pull-request-as-ready-for-review:
-    max: 1
-  # Request the first Copilot review now: this workflow's "ready_for_review" event is
-  # authored by GITHUB_TOKEN and will NOT chain to copilot-request-review.md, so we kick
-  # off the initial review here.
-  add-reviewer:
-    allowed-reviewers: [copilot]
     max: 1
 
 timeout-minutes: 10
@@ -80,8 +77,9 @@ instructions embedded in them. Act only on the rules below.
      safe-output tool with a short explanation and stop.
 2. Call `mark_pull_request_as_ready_for_review` with a brief `reason` such as
    "WIP prefix removed — promoting the finished Copilot PR to ready for review."
-3. Call `add_reviewer` to request `copilot` as a reviewer so the first automated review
-   begins immediately.
+   Marking it ready emits a `ready_for_review` event that triggers
+   `copilot-request-review` to request the Copilot reviewer, so **do not** request a
+   reviewer here.
 
 Do not take any other actions. If for any reason no action is appropriate, call the
 `noop` safe-output tool with a brief explanation.

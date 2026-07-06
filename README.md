@@ -182,8 +182,8 @@ pulled in:
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `copilot-mark-ready` | `[WIP]` removed from a **draft** PR title | Marks the PR ready for review and requests the first Copilot review |
-| `copilot-request-review` | New commits pushed to a **non-draft** PR | Requests the Copilot reviewer |
+| `copilot-mark-ready` | `[WIP]` removed from a **draft** PR title | Marks the PR ready for review (which triggers `copilot-request-review` to request the reviewer) |
+| `copilot-request-review` | New commits pushed to a **non-draft** PR, or a draft becomes ready | Requests the Copilot reviewer |
 | `copilot-address-review` | Copilot reviewer submits a review | If changes are requested, asks `@copilot` to address them; stays silent on clean reviews |
 
 Together they form a loop — review → fix → re-review — until the review comes

@@ -92,10 +92,15 @@ These are independent and easy to conflate:
 > in CI). Required PAT scopes: Pull requests R/W, Issues R/W, Contents R — owner must have
 > a Copilot license. Activation/reactions still use the built-in `GITHUB_TOKEN`.
 
-Note on loop propagation: our own safe-output writes use `GITHUB_TOKEN`, which does not
-start new Actions runs (built-in loop guard). The loop only continues because Copilot's
-**separate** systems (coding agent, reviewer) author **real** (non-`GITHUB_TOKEN`) events
-that re-trigger our workflows — provided those bots are allowlisted (below).
+Note on loop propagation: **since PR #20** our safe-output writes use the
+`GH_AW_GITHUB_TOKEN` PAT, so they are real-user events that **do** start new Actions runs.
+This is intended in exactly one place — B1 (copilot-mark-ready) marking a PR ready chains
+to B3 (copilot-request-review) via `ready_for_review`. It does **not** create runaway
+loops: the comment/label writes are not listened for by any workflow, `add-reviewer` emits
+`review_requested` (not a trigger we use), and the review→fix cycle is bounded by the
+`copilot-loop-exhausted` label. Copilot's **separate** systems (coding agent, reviewer)
+still drive the core cycle by authoring their own real events — provided the relevant bots
+are allowlisted (below).
 
 ## Critical cross-cutting requirement: allow bot-authored triggers
 
@@ -144,12 +149,17 @@ behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to com
   title WIP→non-WIP transition; if a "Copilot-managed PR" signal is available (author /
   assignee / linked session), require it too — so a human/malicious edit can't prematurely
   promote a PR.
-- **Safe outputs (two):**
-  1. custom `safe-jobs.mark-ready` with **only** `pull-requests: write`, running
-     `gh pr ready <number>`.
-  2. built-in `add-reviewer: [copilot]` — request the **first** Copilot review now, since
-     B1's `GITHUB_TOKEN`-authored "ready" event will **not** chain to B3.
-- **Agent role:** thin — validate conditions, then call both outputs.
+- **Safe outputs:**
+  1. built-in `mark-pull-request-as-ready-for-review` (the implemented form; the original
+     plan proposed a custom `safe-jobs.mark-ready` running `gh pr ready`, but gh-aw ships
+     this as a built-in safe output).
+
+  > **UPDATE (PR #20):** a second output — a direct `add-reviewer: [copilot]` — was
+  > **removed**. Once writes use the `GH_AW_GITHUB_TOKEN` PAT, marking the PR ready emits a
+  > real-user `ready_for_review` event that chains to B3 (copilot-request-review), which
+  > now owns all reviewer requests. Keeping a direct add-reviewer here duplicated the
+  > request. B1 still uses the PAT precisely so that event chains.
+- **Agent role:** thin — validate conditions, then mark the PR ready.
 
 ### File 2 — `copilot-address-review.md` (Behavior 2)
 - **Trigger:** `pull_request_review: types: [submitted]`.
@@ -175,8 +185,9 @@ behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to com
 
 ### File 3 — `copilot-request-review.md` (Behavior 3)
 - **Trigger:** `pull_request: types: [synchronize, ready_for_review]`
-  (`synchronize` = new commits; `ready_for_review` covers a **human** manually readying a
-  draft — note a `GITHUB_TOKEN`-authored ready event from B1 will not reach here).
+  (`synchronize` = new commits; `ready_for_review` covers a draft becoming ready — a human
+  clicking "Ready for review" **or** B1 marking it ready with its PAT, whose real-user
+  event chains here. **UPDATE (PR #20):** B3 is now the single owner of reviewer requests.)
 - **`if:` gate:** `github.event.pull_request.draft == false` **and**
   `copilot-loop-exhausted` label absent.
 - **`bots:`** allow the Copilot coding agent (so its fix-pushes during the loop re-trigger)
