@@ -65,7 +65,7 @@ jobs:
           # surfaces.) Restricting to Copilot authorship keeps human WIP drafts untouched.
           # Once a PR is marked ready it is no longer a draft, so it is not re-processed.
           numbers="$(
-            gh pr list --repo "$REPO" --state open --draft --limit 100 \
+            gh pr list --repo "$REPO" --state open --draft --limit 1000 \
               --json number,title,author \
               --jq '.[]
                 | select(.author.login == "app/copilot-swe-agent"
@@ -83,5 +83,7 @@ jobs:
           echo "Eligible PRs: $numbers"
           for pr in $numbers; do
             echo "Marking PR #$pr ready for review..."
-            gh pr ready "$pr" --repo "$REPO"
+            if ! gh pr ready "$pr" --repo "$REPO"; then
+              echo "Failed to mark PR #$pr ready for review; continuing." >&2
+            fi
           done
