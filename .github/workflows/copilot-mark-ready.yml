@@ -1,0 +1,43 @@
+# Plain (non-agentic) GitHub Actions workflow — the deterministic replacement for the
+# former copilot-mark-ready.md agentic workflow. Promoting a draft PR to ready-for-review
+# when its [WIP] title prefix is removed needs no AI, so it runs as a normal Action.
+#
+# It intentionally marks the PR ready using the GH_AW_GITHUB_TOKEN PAT (not the default
+# GITHUB_TOKEN) so the resulting `ready_for_review` event is authored by a real user and
+# chains to the copilot-request-review agentic workflow, which requests the Copilot
+# reviewer. A GITHUB_TOKEN-authored ready event would not trigger that follow-on workflow.
+# See README ("Automated Copilot PR review") for the token and its scopes.
+name: Mark PR ready when WIP removed
+
+on:
+  pull_request:
+    types: [edited]
+
+# We mark the PR ready with the PAT (below), so the default GITHUB_TOKEN needs no
+# elevated scope. Keep it read-only.
+permissions:
+  contents: read
+
+jobs:
+  mark-ready:
+    name: Mark draft ready for review
+    runs-on: ubuntu-latest
+    # Run only when a same-repo draft PR's title just transitioned from containing [WIP]
+    # to not containing it. `github.event.changes.title` is present only when the title
+    # actually changed in this edit, so unrelated edits (body, base, labels) are skipped.
+    # The same-repo check mirrors the fork protection of the former agentic workflow;
+    # fork PRs also lack access to the PAT secret, so they are skipped cleanly here.
+    if: >
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.repo.id == github.event.repository.id &&
+      !contains(github.event.pull_request.title, '[WIP]') &&
+      github.event.changes.title &&
+      contains(github.event.changes.title.from, '[WIP]')
+    steps:
+      - name: Mark pull request ready for review
+        env:
+          # PAT so the ready_for_review event chains to copilot-request-review.
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: gh pr ready "$PR_NUMBER" --repo "$REPO"

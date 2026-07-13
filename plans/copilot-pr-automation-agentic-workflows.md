@@ -23,7 +23,7 @@ Together these form an intentional, self-converging loop:
 
 | Behavior | Trigger | Action mechanism | gh-aw support |
 | --- | --- | --- | --- |
-| 1. Mark ready | `pull_request: [edited]` | custom `safe-jobs.mark-ready` (`gh pr ready`) **+** built-in `add-reviewer: [copilot]` | No built-in draft→ready output; custom safe-job covers it |
+| 1. Mark ready | `pull_request: [edited]` | **plain GitHub Action** running `gh pr ready` (was: built-in `mark-pull-request-as-ready-for-review`) | Fully deterministic — converted out of gh-aw (see File 1) |
 | 2. Ask Copilot to fix | `pull_request_review: [submitted]` | built-in `add-comment` (@copilot) **+** `add-labels` (exhaustion) | Native; AI summarizes asks, decision is mostly deterministic |
 | 3. Request review | `pull_request: [synchronize, ready_for_review]` | built-in `add-reviewer` with `allowed-reviewers: [copilot]` | Native (docs explicitly support `copilot`) |
 
@@ -139,27 +139,35 @@ or review text** (prompt-injection hardening — only act on the structured even
 behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to committed
 `*.lock.yml`.
 
-### File 1 — `copilot-mark-ready.md` (Behavior 1)
-- **Trigger:** `pull_request: types: [edited]`.
-- **Deterministic `if:` pre-filter** (avoids agent runs on every edit): draft is `true`,
-  current title does **not** contain `[WIP]`, and `github.event.changes.title.from`
-  **did** contain `[WIP]` (WIP was just removed in this edit).
-- **`bots:`** allow the Copilot coding agent (it edits the title) — login from V4.
-- **Trust boundary:** require actor == the Copilot coding-agent bot, PR is draft, and the
-  title WIP→non-WIP transition; if a "Copilot-managed PR" signal is available (author /
-  assignee / linked session), require it too — so a human/malicious edit can't prematurely
-  promote a PR.
-- **Safe outputs:**
-  1. built-in `mark-pull-request-as-ready-for-review` (the implemented form; the original
-     plan proposed a custom `safe-jobs.mark-ready` running `gh pr ready`, but gh-aw ships
-     this as a built-in safe output).
+### File 1 — `copilot-mark-ready.yml` (Behavior 1) — plain GitHub Action
 
-  > **UPDATE (PR #20):** a second output — a direct `add-reviewer: [copilot]` — was
-  > **removed**. Once writes use the `GH_AW_GITHUB_TOKEN` PAT, marking the PR ready emits a
-  > real-user `ready_for_review` event that chains to B3 (copilot-request-review), which
-  > now owns all reviewer requests. Keeping a direct add-reviewer here duplicated the
-  > request. B1 still uses the PAT precisely so that event chains.
-- **Agent role:** thin — validate conditions, then mark the PR ready.
+> **UPDATE (post-PR #20):** Behavior 1 is **fully deterministic** (no AI value-add: the
+> entire filter is a static `if:` over the event payload, and the only action is one API
+> call), so it was **converted from an agentic workflow to a plain GitHub Actions workflow**
+> (`copilot-mark-ready.yml`, replacing `copilot-mark-ready.md` + its `.lock.yml`). Behavior
+> is unchanged. The remaining agentic details below are retained for history.
+
+- **Trigger:** `pull_request: types: [edited]`.
+- **Deterministic `if:` gate:** draft is `true`; **same-repo** (`head.repo.id ==
+  repository.id`, mirroring the old fork protection); current title does **not** contain
+  `[WIP]`; and `github.event.changes.title` is present with `.from` containing `[WIP]`
+  (WIP was just removed in this edit).
+- **Action:** `gh pr ready "$PR_NUMBER"` with `GH_TOKEN` set to the `GH_AW_GITHUB_TOKEN`
+  PAT — so the resulting `ready_for_review` event is user-authored and **chains to B3**
+  (copilot-request-review), which requests the Copilot reviewer. A `GITHUB_TOKEN`-authored
+  ready event would not trigger B3.
+- **Actor gating note:** unlike the agentic version (which restricted triggering to
+  write-role humans + the `copilot-swe-agent[bot]` via gh-aw's `bots:`/role gating), the
+  plain Action runs for any title editor. This is low-risk — it only un-drafts a PR whose
+  title just lost `[WIP]`, and fork PRs are excluded and lack the PAT secret anyway. Tighten
+  with an `author_association` check if stricter gating is wanted.
+
+**Historical (agentic form, superseded):**
+- **`bots:`** allowed the Copilot coding agent (it edits the title) — login from V4.
+- **Trust boundary:** required actor == the Copilot coding-agent bot + the draft/WIP
+  transition, so a human/malicious edit couldn't prematurely promote a PR.
+- **Safe output:** built-in `mark-pull-request-as-ready-for-review` (PR #20 removed a
+  direct `add-reviewer: [copilot]` once the PAT-authored ready event began chaining to B3).
 
 ### File 2 — `copilot-address-review.md` (Behavior 2)
 - **Trigger:** `pull_request_review: types: [submitted]`.
