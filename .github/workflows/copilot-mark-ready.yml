@@ -66,8 +66,9 @@ jobs:
           # Once a PR is marked ready it is no longer a draft, so it is not re-processed.
           numbers="$(
             gh pr list --repo "$REPO" --state open --draft --limit 1000 \
-              --json number,title,author \
+              --json number,title,author,isCrossRepository \
               --jq '.[]
+                | select(.isCrossRepository == false)
                 | select(.author.login == "app/copilot-swe-agent"
                       or .author.login == "copilot-swe-agent[bot]"
                       or .author.login == "Copilot")
