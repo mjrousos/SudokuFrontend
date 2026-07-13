@@ -17,7 +17,7 @@ const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 </script>
 
 <template>
-  <div class="number-pad" role="group" aria-label="Number pad">
+  <div class="number-pad" role="group" aria-label="Number pad" data-testid="number-pad">
     <button
       v-for="n in digits"
       :key="n"
