@@ -34,10 +34,20 @@ jobs:
       github.event.changes.title &&
       contains(github.event.changes.title.from, '[WIP]')
     steps:
+      - name: Validate GH_AW_GITHUB_TOKEN is configured
+        env:
+          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$GH_AW_GITHUB_TOKEN" ]; then
+            echo "GH_AW_GITHUB_TOKEN secret is required (do not fall back to GITHUB_TOKEN)." >&2
+            exit 1
+          fi
       - name: Mark pull request ready for review
         env:
           # PAT so the ready_for_review event chains to copilot-request-review.
           GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          # Prevent gh from silently falling back to the workflow's built-in token.
+          GITHUB_TOKEN: ''
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: gh pr ready "$PR_NUMBER" --repo "$REPO"
