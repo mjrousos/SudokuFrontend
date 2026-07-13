@@ -15,7 +15,7 @@
 # copilot-request-review agentic workflow, which requests the Copilot reviewer. A
 # GITHUB_TOKEN-authored ready event would not trigger that follow-on workflow.
 # See README ("Automated Copilot PR review") for the token and its scopes.
-name: Mark Copilot PRs ready when WIP removed
+name: Mark eligible Copilot draft PRs ready for review
 
 on:
   # Poll every ~5 minutes. Cron is triggered by GitHub (a non-Copilot actor), which is
