@@ -141,36 +141,37 @@ behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to com
 
 ### File 1 — `copilot-mark-ready.yml` (Behavior 1) — plain GitHub Action
 
-> **UPDATE (post-PR #20):** Behavior 1 is **fully deterministic** (no AI value-add: the
-> entire filter is a static `if:` over the event payload, and the only action is one API
-> call), so it was **converted from an agentic workflow to a plain GitHub Actions workflow**
-> (`copilot-mark-ready.yml`, replacing `copilot-mark-ready.md` + its `.lock.yml`). Behavior
-> is unchanged. The remaining agentic details below are retained for history.
+> **UPDATE (post-PR #20):** Behavior 1 is **fully deterministic** (no AI value-add), so it
+> was **converted from an agentic workflow to a plain GitHub Actions workflow**
+> (`copilot-mark-ready.yml`, replacing `copilot-mark-ready.md` + its `.lock.yml`).
+>
+> **UPDATE (approval gate):** GitHub does not run Actions automatically on events triggered
+> by the Copilot coding agent (the "Approve and run workflows" gate), and this gate keys on
+> the *triggering actor* being Copilot — it applies to `pull_request` **and**
+> `pull_request_target` and cannot be disabled by a repo setting. An interim
+> `pull_request_target` attempt did **not** work (runs stayed `action_required` with
+> `triggering_actor: Copilot`). The workflow was therefore moved to a **`schedule` (cron)**,
+> which is triggered by GitHub (a non-Copilot actor) in the trusted base context and is
+> never gated. The details below reflect the current scheduled form.
 
-- **Trigger:** `pull_request_target: types: [edited]`. (Was `pull_request`; switched so the
-  run is not blocked by GitHub's manual-approval gate on Copilot-agent-triggered workflow
-  runs — `pull_request_target` runs in the trusted base context and always runs. Safe here
-  because the workflow executes **no** PR-authored code; do not add a PR-head checkout.)
-- **Deterministic `if:` gate:** draft is `true`; **same-repo** (`head.repo.id ==
-  repository.id`, mirroring the old fork protection); current title does **not** contain
-  `[WIP]`; and `github.event.changes.title` is present with `.from` containing `[WIP]`
-  (WIP was just removed in this edit).
-- **Action:** `gh pr ready "$PR_NUMBER"` with `GH_TOKEN` set to the `GH_AW_GITHUB_TOKEN`
-  PAT — so the resulting `ready_for_review` event is user-authored and **chains to B3**
-  (copilot-request-review), which requests the Copilot reviewer. A `GITHUB_TOKEN`-authored
-  ready event would not trigger B3.
-- **Actor gating note:** unlike the agentic version (which restricted triggering to
-  write-role humans + the `copilot-swe-agent[bot]` via gh-aw's `bots:`/role gating), the
-  plain Action runs for any title editor. This is low-risk — it only un-drafts a PR whose
-  title just lost `[WIP]`, and fork PRs are excluded and lack the PAT secret anyway. Tighten
-  with an `author_association` check if stricter gating is wanted.
+- **Trigger:** `schedule: cron "*/5 * * * *"` (+ `workflow_dispatch` for manual testing).
+  Not `pull_request*` — see the approval-gate note above.
+- **Selection (deterministic, done in the step, not an `if:`):** list open **draft** PRs
+  authored by the Copilot coding agent (`gh` reports the login as `app/copilot-swe-agent`;
+  `copilot-swe-agent[bot]`/`Copilot` also accepted) whose title does **not** contain
+  `[WIP]`. Scoping to Copilot authorship keeps human WIP drafts untouched; once a PR is
+  marked ready it is no longer a draft, so it is not re-processed. Latency: up to ~5 min.
+- **Action:** `gh pr ready <n>` with `GH_TOKEN` = `GH_AW_GITHUB_TOKEN` PAT — so each
+  resulting `ready_for_review` event is user-authored and **chains to B3**
+  (copilot-request-review). A `GITHUB_TOKEN`-authored ready event would not trigger B3, and
+  (being a PAT/user event, not a Copilot event) the chained B3 run is itself not gated.
 
-**Historical (agentic form, superseded):**
-- **`bots:`** allowed the Copilot coding agent (it edits the title) — login from V4.
-- **Trust boundary:** required actor == the Copilot coding-agent bot + the draft/WIP
-  transition, so a human/malicious edit couldn't prematurely promote a PR.
-- **Safe output:** built-in `mark-pull-request-as-ready-for-review` (PR #20 removed a
-  direct `add-reviewer: [copilot]` once the PAT-authored ready event began chaining to B3).
+**Historical (superseded forms):**
+- Agentic `pull_request:[edited]` with an `if:` gate + built-in
+  `mark-pull-request-as-ready-for-review` (PR #20 removed a direct `add-reviewer: [copilot]`
+  once the PAT-authored ready event began chaining to B3).
+- Plain `pull_request` then `pull_request_target` `[edited]` Action — both blocked by the
+  Copilot approval gate.
 
 ### File 2 — `copilot-address-review.md` (Behavior 2)
 - **Trigger:** `pull_request_review: types: [submitted]`.
