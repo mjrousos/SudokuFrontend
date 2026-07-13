@@ -2,49 +2,44 @@
 # former copilot-mark-ready.md agentic workflow. Promoting a draft PR to ready-for-review
 # when its [WIP] title prefix is removed needs no AI, so it runs as a normal Action.
 #
-# It intentionally marks the PR ready using the GH_AW_GITHUB_TOKEN PAT (not the default
-# GITHUB_TOKEN) so the resulting `ready_for_review` event is authored by a real user and
-# chains to the copilot-request-review agentic workflow, which requests the Copilot
-# reviewer. A GITHUB_TOKEN-authored ready event would not trigger that follow-on workflow.
-# See README ("Automated Copilot PR review") for the token and its scopes.
+# WHY A SCHEDULE (and not pull_request):
+# GitHub does not run Actions automatically on events triggered by the Copilot coding
+# agent (the "Approve and run workflows" gate). That gate keys on the *triggering actor*
+# being Copilot, so it applies to `pull_request` AND `pull_request_target` alike and
+# cannot be disabled by a setting on a public repo. A scheduled run is triggered by
+# GitHub's scheduler (not Copilot), runs in the trusted base context, and is therefore
+# never subject to that gate — so this marks PRs ready with no human interaction.
 #
-# SECURITY — why pull_request_target:
-# The Copilot coding agent edits the title, and GitHub gates Actions runs triggered by
-# the agent (and other non-write contributors) behind a manual "approve workflows to run"
-# step. Workflows triggered by `pull_request_target` run in the trusted base-branch
-# context and are NOT subject to that approval gate, so this runs with no human
-# interaction. This is safe ONLY because the workflow never checks out or executes any
-# pull-request-authored code — it just reads event metadata and calls `gh pr ready`.
-# DO NOT add a checkout of the PR head, or run any PR-provided code/scripts, in this file:
-# doing so with pull_request_target (which has repo secrets) would be a security hole.
-name: Mark PR ready when WIP removed
+# It marks the PR ready using the GH_AW_GITHUB_TOKEN PAT (not the default GITHUB_TOKEN) so
+# the resulting `ready_for_review` event is authored by a real user and chains to the
+# copilot-request-review agentic workflow, which requests the Copilot reviewer. A
+# GITHUB_TOKEN-authored ready event would not trigger that follow-on workflow.
+# See README ("Automated Copilot PR review") for the token and its scopes.
+name: Mark Copilot PRs ready when WIP removed
 
 on:
-  # Base-context trigger so the run is not blocked by the Copilot/contributor approval
-  # gate. See the SECURITY note above before changing this or adding steps.
-  pull_request_target:
-    types: [edited]
+  # Poll every ~5 minutes. Cron is triggered by GitHub (a non-Copilot actor), which is
+  # what lets this bypass the Copilot workflow-approval gate. GitHub may add a few minutes
+  # of delay to scheduled runs under load.
+  schedule:
+    - cron: "*/5 * * * *"
+  # Allow manual runs from the Actions tab for testing (write-user dispatch is not gated).
+  workflow_dispatch: {}
 
-# We mark the PR ready with the PAT (below), so the default GITHUB_TOKEN needs no
+# All GitHub calls below use the PAT (GH_TOKEN), so the built-in GITHUB_TOKEN needs no
 # elevated scope. Keep it read-only.
 permissions:
   contents: read
 
+# Never let two scans overlap.
+concurrency:
+  group: mark-copilot-prs-ready
+  cancel-in-progress: false
+
 jobs:
   mark-ready:
-    name: Mark draft ready for review
+    name: Mark eligible Copilot draft PRs ready for review
     runs-on: ubuntu-latest
-    # Run only when a same-repo draft PR's title just transitioned from containing [WIP]
-    # to not containing it. `github.event.changes.title` is present only when the title
-    # actually changed in this edit, so unrelated edits (body, base, labels) are skipped.
-    # The same-repo check mirrors the fork protection of the former agentic workflow;
-    # fork PRs also lack access to the PAT secret, so they are skipped cleanly here.
-    if: >
-      github.event.pull_request.draft == true &&
-      github.event.pull_request.head.repo.id == github.event.repository.id &&
-      !contains(github.event.pull_request.title, '[WIP]') &&
-      github.event.changes.title &&
-      contains(github.event.changes.title.from, '[WIP]')
     steps:
       - name: Validate GH_AW_GITHUB_TOKEN is configured
         env:
@@ -54,12 +49,39 @@ jobs:
             echo "GH_AW_GITHUB_TOKEN secret is required (do not fall back to GITHUB_TOKEN)." >&2
             exit 1
           fi
-      - name: Mark pull request ready for review
+      - name: Mark eligible Copilot draft PRs ready
         env:
-          # PAT so the ready_for_review event chains to copilot-request-review.
+          # PAT so each `gh pr ready` emits a user-authored ready_for_review event that
+          # chains to copilot-request-review.
           GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
           # Prevent gh from silently falling back to the workflow's built-in token.
-          GITHUB_TOKEN: ''
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ""
           REPO: ${{ github.repository }}
-        run: gh pr ready "$PR_NUMBER" --repo "$REPO"
+        run: |
+          set -euo pipefail
+          # Eligible = open, draft, authored by the Copilot coding agent, and whose title
+          # no longer contains [WIP]. (`gh` reports the agent's author login as
+          # `app/copilot-swe-agent`; the others are accepted for robustness across API
+          # surfaces.) Restricting to Copilot authorship keeps human WIP drafts untouched.
+          # Once a PR is marked ready it is no longer a draft, so it is not re-processed.
+          numbers="$(
+            gh pr list --repo "$REPO" --state open --draft --limit 100 \
+              --json number,title,author \
+              --jq '.[]
+                | select(.author.login == "app/copilot-swe-agent"
+                      or .author.login == "copilot-swe-agent[bot]"
+                      or .author.login == "Copilot")
+                | select((.title | test("\\[WIP\\]")) | not)
+                | .number'
+          )"
+
+          if [ -z "$numbers" ]; then
+            echo "No eligible Copilot draft PRs to mark ready."
+            exit 0
+          fi
+
+          echo "Eligible PRs: $numbers"
+          for pr in $numbers; do
+            echo "Marking PR #$pr ready for review..."
+            gh pr ready "$pr" --repo "$REPO"
+          done

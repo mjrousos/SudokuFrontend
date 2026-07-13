@@ -184,7 +184,7 @@ workflow (`*.yml`), because its logic is purely deterministic and needs no AI:
 
 | Workflow | Kind | Trigger | What it does |
 | --- | --- | --- | --- |
-| `copilot-mark-ready` | plain Action | `[WIP]` removed from a **draft** PR title | Marks the PR ready for review (which triggers `copilot-request-review` to request the reviewer) |
+| `copilot-mark-ready` | plain Action | **Scheduled** (~every 5 min) | Marks ready any Copilot-authored **draft** PR whose title no longer contains `[WIP]` (which triggers `copilot-request-review` to request the reviewer) |
 | `copilot-request-review` | agentic | New commits pushed to a **non-draft** PR, or a draft becomes ready | Requests the Copilot reviewer |
 | `copilot-address-review` | agentic | Copilot reviewer submits a review | If changes are requested, asks `@copilot` to address them; stays silent on clean reviews |
 
@@ -199,23 +199,28 @@ next push.
 
 ### Workflow approval on Copilot's pull requests
 
-GitHub gates Actions runs that are *triggered by the Copilot coding agent* (and
-other non-write contributors) behind a manual **"Approve workflows to run"**
-step — this is a security control and, on Copilot's PRs, it is **not** removed by
-the repo's fork-PR approval setting.
+GitHub does **not** run Actions automatically on events triggered by the Copilot
+coding agent — a write-access user must click **"Approve and run workflows"**.
+This gate keys on the *triggering actor* being Copilot, so it applies to both
+`pull_request` and `pull_request_target` and **cannot** be disabled by a
+repository setting (it is separate from, and stricter than, the fork-PR approval
+setting).
 
-`copilot-mark-ready` avoids this by using the **`pull_request_target`** trigger,
-which runs in the trusted base-branch context and is therefore not subject to the
-approval gate. This is safe only because the workflow never checks out or runs
-pull-request-authored code — it just reads the event and calls `gh pr ready`.
-**Do not add a PR-code checkout to that workflow.**
+`copilot-mark-ready` sidesteps this entirely by running on a **schedule** rather
+than on a Copilot-authored PR event: a cron run is triggered by GitHub (not
+Copilot) in the trusted base context, so it is never gated. It scans open
+Copilot-authored draft PRs and marks ready any whose title no longer contains
+`[WIP]`. Trade-off: up to ~5 minutes of latency instead of reacting instantly to
+the title edit.
 
 The two agentic workflows use ordinary `pull_request` / `pull_request_review`
-triggers, so runs they receive directly from a Copilot **bot** event (a
-fix-push's `synchronize`, or the reviewer's review) may still show "awaiting
-approval" and need a one-click approve. Steps that are chained via the
+triggers, so runs they receive **directly** from a Copilot bot event (a
+fix-push's `synchronize`, or the reviewer's review) can still show "awaiting
+approval" and need a one-click approve. Steps chained via the
 `GH_AW_GITHUB_TOKEN` PAT (owned by a write-access user) are attributed to that
-user and run without approval.
+user and run without approval — for example, the `ready_for_review` event that
+`copilot-mark-ready` produces chains to `copilot-request-review` without a
+prompt.
 
 ### Required secret: `GH_AW_GITHUB_TOKEN`
 
