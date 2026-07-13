@@ -197,6 +197,26 @@ after **3 rounds** and applies the **`copilot-loop-exhausted`** and
 **Reset:** remove the `copilot-loop-exhausted` label to resume automation on the
 next push.
 
+### Workflow approval on Copilot's pull requests
+
+GitHub gates Actions runs that are *triggered by the Copilot coding agent* (and
+other non-write contributors) behind a manual **"Approve workflows to run"**
+step — this is a security control and, on Copilot's PRs, it is **not** removed by
+the repo's fork-PR approval setting.
+
+`copilot-mark-ready` avoids this by using the **`pull_request_target`** trigger,
+which runs in the trusted base-branch context and is therefore not subject to the
+approval gate. This is safe only because the workflow never checks out or runs
+pull-request-authored code — it just reads the event and calls `gh pr ready`.
+**Do not add a PR-code checkout to that workflow.**
+
+The two agentic workflows use ordinary `pull_request` / `pull_request_review`
+triggers, so runs they receive directly from a Copilot **bot** event (a
+fix-push's `synchronize`, or the reviewer's review) may still show "awaiting
+approval" and need a one-click approve. Steps that are chained via the
+`GH_AW_GITHUB_TOKEN` PAT (owned by a write-access user) are attributed to that
+user and run without approval.
+
 ### Required secret: `GH_AW_GITHUB_TOKEN`
 
 These workflows perform their write actions (mark ready, request the Copilot
