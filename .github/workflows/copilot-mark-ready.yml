@@ -18,11 +18,14 @@
 name: Mark eligible Copilot draft PRs ready for review
 
 on:
-  # Poll every ~5 minutes. Cron is triggered by GitHub (a non-Copilot actor), which is
-  # what lets this bypass the Copilot workflow-approval gate. GitHub may add a few minutes
-  # of delay to scheduled runs under load.
+  # Poll roughly every 15 minutes, at :03/:18/:33/:48. Cron is triggered by GitHub (a
+  # non-Copilot actor), which is what lets this bypass the Copilot workflow-approval gate.
+  # `schedule` is best-effort: GitHub delays or drops runs under load, and high-frequency
+  # crons (e.g. */5) and the top of each hour are the worst-affected. This deliberately
+  # avoids both — an off-the-hour, ~15-minute cadence is delivered more reliably than */5,
+  # at the cost of a little more latency before a finished draft is marked ready.
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "3,18,33,48 * * * *"
   # Allow manual runs from the Actions tab for testing (write-user dispatch is not gated).
   workflow_dispatch: {}
 
