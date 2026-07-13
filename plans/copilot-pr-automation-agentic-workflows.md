@@ -147,7 +147,10 @@ behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to com
 > (`copilot-mark-ready.yml`, replacing `copilot-mark-ready.md` + its `.lock.yml`). Behavior
 > is unchanged. The remaining agentic details below are retained for history.
 
-- **Trigger:** `pull_request: types: [edited]`.
+- **Trigger:** `pull_request_target: types: [edited]`. (Was `pull_request`; switched so the
+  run is not blocked by GitHub's manual-approval gate on Copilot-agent-triggered workflow
+  runs — `pull_request_target` runs in the trusted base context and always runs. Safe here
+  because the workflow executes **no** PR-authored code; do not add a PR-head checkout.)
 - **Deterministic `if:` gate:** draft is `true`; **same-repo** (`head.repo.id ==
   repository.id`, mirroring the old fork protection); current title does **not** contain
   `[WIP]`; and `github.event.changes.title` is present with `.from` containing `[WIP]`
