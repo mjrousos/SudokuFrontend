@@ -274,6 +274,7 @@ const timerLabel = computed(() => {
       <div class="grid gap-6 md:grid-cols-[auto_1fr]">
         <div class="space-y-3">
           <SudokuBoard
+            v-if="!paused"
             :grid="currentGame.grid"
             :selected="selected"
             :pencil-mode="pencilMode"
@@ -283,7 +284,7 @@ const timerLabel = computed(() => {
             @clear="onBoardClear"
             @pencil-toggle="onBoardPencilToggle"
           />
-          <p v-if="paused" class="text-sm text-slate-500" data-testid="paused-banner">
+          <p v-else class="text-sm text-slate-500" data-testid="paused-banner">
             Board hidden. Resume to continue.
           </p>
         </div>
