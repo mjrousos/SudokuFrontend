@@ -184,7 +184,7 @@ workflow (`*.yml`), because its logic is purely deterministic and needs no AI:
 
 | Workflow | Kind | Trigger | What it does |
 | --- | --- | --- | --- |
-| `copilot-mark-ready` | plain Action | **Scheduled** (~every 5 min) | Marks ready any Copilot-authored **draft** PR whose title no longer contains `[WIP]` (which triggers `copilot-request-review` to request the reviewer) |
+| `copilot-mark-ready` | plain Action | **Scheduled** (~every 15 min) | Marks ready any Copilot-authored **draft** PR whose title no longer contains `[WIP]` (which triggers `copilot-request-review` to request the reviewer) |
 | `copilot-request-review` | agentic | New commits pushed to a **non-draft** PR, or a draft becomes ready | Requests the Copilot reviewer |
 | `copilot-address-review` | agentic | Copilot reviewer submits a review | If changes are requested, asks `@copilot` to address them; stays silent on clean reviews |
 
@@ -210,8 +210,11 @@ setting).
 than on a Copilot-authored PR event: a cron run is triggered by GitHub (not
 Copilot) in the trusted base context, so it is never gated. It scans open
 Copilot-authored draft PRs and marks ready any whose title no longer contains
-`[WIP]`. Trade-off: up to ~5 minutes of latency instead of reacting instantly to
-the title edit.
+`[WIP]`. The cron runs at :03/:18/:33/:48 (~every 15 min, off the hour):
+`schedule` delivery is best-effort, and GitHub throttles high-frequency crons
+(e.g. `*/5`) and top-of-hour slots hardest, so this cadence is delivered more
+reliably. Trade-off: up to ~15 minutes of latency instead of reacting instantly
+to the title edit.
 
 The two agentic workflows use ordinary `pull_request` / `pull_request_review`
 triggers, so runs they receive **directly** from a Copilot bot event (a

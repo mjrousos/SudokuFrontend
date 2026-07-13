@@ -154,13 +154,15 @@ behavior's rules). Files live in `.github/workflows/` as `*.md`, compiled to com
 > which is triggered by GitHub (a non-Copilot actor) in the trusted base context and is
 > never gated. The details below reflect the current scheduled form.
 
-- **Trigger:** `schedule: cron "*/5 * * * *"` (+ `workflow_dispatch` for manual testing).
-  Not `pull_request*` — see the approval-gate note above.
+- **Trigger:** `schedule: cron "3,18,33,48 * * * *"` (~every 15 min, off the hour; +
+  `workflow_dispatch` for manual testing). Not `pull_request*` — see the approval-gate note
+  above. An earlier `*/5` cadence was throttled by GitHub (best-effort `schedule` delivery
+  drops high-frequency and top-of-hour runs), so it was moved off-peak.
 - **Selection (deterministic, done in the step, not an `if:`):** list open **draft** PRs
   authored by the Copilot coding agent (`gh` reports the login as `app/copilot-swe-agent`;
   `copilot-swe-agent[bot]`/`Copilot` also accepted) whose title does **not** contain
   `[WIP]`. Scoping to Copilot authorship keeps human WIP drafts untouched; once a PR is
-  marked ready it is no longer a draft, so it is not re-processed. Latency: up to ~5 min.
+  marked ready it is no longer a draft, so it is not re-processed. Latency: up to ~15 min.
 - **Action:** `gh pr ready <n>` with `GH_TOKEN` = `GH_AW_GITHUB_TOKEN` PAT — so each
   resulting `ready_for_review` event is user-authored and **chains to B3**
   (copilot-request-review). A `GITHUB_TOKEN`-authored ready event would not trigger B3, and
