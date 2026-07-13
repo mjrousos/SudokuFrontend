@@ -116,7 +116,7 @@ Lower structure/readability for this much conditional logic.
 copilot-reconcile.mjs
   main()
     load config (repo, DRY_RUN, round cap, reviewer/author logins)
-    prs = listCopilotPРs()                 // open, author app/copilot-swe-agent
+    prs = listCopilotPRs()                 // open, author app/copilot-swe-agent
     for pr of prs:
       if hasLabel(pr, 'copilot-loop-exhausted'): continue
       markReadyIfEligible(pr)              // Scenario 1
@@ -124,7 +124,7 @@ copilot-reconcile.mjs
       addressReviewIfRequested(pr)         // Scenario 2
   // helpers
   gh(args) / ghJson(args) / ghGraphql(query, vars)
-  listCopilotPРs()
+  listCopilotPRs()
   markReadyIfEligible(pr)
   requestReviewIfNeeded(pr)
   addressReviewIfRequested(pr)
