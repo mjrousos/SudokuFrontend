@@ -1,0 +1,29 @@
+name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.25
+          cache: false
+
+      - name: Install GitHub MCP Server
+        run: |
+          go install github.com/github/github-mcp-server/cmd/github-mcp-server@sammorrowdrums-github-app-s2s-auth
+          github-mcp-server stdio --help
