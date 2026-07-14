@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { RouterLink, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 
-import { useAuthStore } from '@/features/auth/store/authStore';
 import SudokuBoard from '@/features/game/components/SudokuBoard.vue';
 import { ApiError } from '@/shared/api/problemDetails';
 import { decodeBoard } from '@/shared/sudoku/boardCodec';
@@ -13,7 +12,6 @@ import { todayUtc, useDailyStore } from '../store/dailyStore';
 
 const PREVIEW_WINDOW_DAYS = 30;
 
-const auth = useAuthStore();
 const daily = useDailyStore();
 const router = useRouter();
 const toasts = useToastStore();
@@ -106,31 +104,19 @@ async function onPreviewDateChange(): Promise<void> {
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-2">
           <h2 class="text-lg font-semibold">Today&#39;s challenge</h2>
-          <p v-if="auth.isAuthenticated" class="text-sm text-slate-600 dark:text-slate-300">
+          <p class="text-sm text-slate-600 dark:text-slate-300">
             Start or resume today&#39;s daily puzzle for {{ today }}.
-          </p>
-          <p v-else class="text-sm text-slate-600 dark:text-slate-300">
-            Sign in to play today&#39;s daily and keep your progress tied to your account.
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
           <AppButton
-            v-if="auth.isAuthenticated"
             :loading="startingToday"
             data-testid="play-today"
             @click="playToday"
           >
             Play today&#39;s daily
           </AppButton>
-
-          <RouterLink
-            v-else
-            :to="{ name: 'login', query: { redirectTo: '/daily' } }"
-            class="inline-flex"
-          >
-            <AppButton variant="secondary" data-testid="sign-in-daily">Sign in to play</AppButton>
-          </RouterLink>
         </div>
       </div>
     </section>

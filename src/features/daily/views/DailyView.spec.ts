@@ -1,4 +1,4 @@
-import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,7 +15,6 @@ vi.mock('vue-router', async () => {
 });
 
 import DailyView from './DailyView.vue';
-import { useAuthStore } from '@/features/auth/store/authStore';
 import { todayUtc, useDailyStore } from '@/features/daily/store/dailyStore';
 import { decodeBoard } from '@/shared/sudoku/boardCodec';
 import type { GameViewModel } from '@/shared/sudoku/types';
@@ -59,29 +58,8 @@ function makeGameViewModel(gameId = 'g-daily'): GameViewModel {
   };
 }
 
-function authenticate(): void {
-  const auth = useAuthStore();
-  auth._applyTokens(
-    {
-      accessToken: 'access-token',
-      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-      refreshToken: 'refresh-token',
-      refreshTokenExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
-      userId: 'user-1',
-      displayName: 'Tester',
-    },
-    { broadcast: false, persist: false },
-  );
-}
-
 function mountView() {
-  return mount(DailyView, {
-    global: {
-      stubs: {
-        RouterLink: RouterLinkStub,
-      },
-    },
-  });
+  return mount(DailyView);
 }
 
 beforeEach(() => {
@@ -90,19 +68,14 @@ beforeEach(() => {
 });
 
 describe('DailyView', () => {
-  it('shows the sign-in prompt when unauthenticated and hides the play CTA', () => {
+  it('shows the play CTA when unauthenticated', () => {
     const wrapper = mountView();
 
-    expect(wrapper.find('[data-testid="play-today"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="sign-in-daily"]').exists()).toBe(true);
-    expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({
-      name: 'login',
-      query: { redirectTo: '/daily' },
-    });
+    expect(wrapper.get('[data-testid="play-today"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("Start or resume today's daily puzzle");
   });
 
-  it('shows the play CTA when authenticated and routes to the game after starting', async () => {
-    authenticate();
+  it('routes to the game after starting today\'s daily', async () => {
     const daily = useDailyStore();
     const startToday = vi.spyOn(daily, 'startToday').mockResolvedValue(makeGameViewModel('g-play'));
     const wrapper = mountView();

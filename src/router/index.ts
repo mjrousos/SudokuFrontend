@@ -30,13 +30,12 @@ const routes: RouteRecordRaw[] = [
     component: DefaultLayout,
     children: [
       { path: '', name: 'home', component: HomeView },
-      { path: 'play', name: 'play.new', component: NewGameView, meta: { requiresAuth: true } },
+      { path: 'play', name: 'play.new', component: NewGameView },
       {
         path: 'play/:gameId',
         name: 'play.game',
         component: PlayView,
         props: true,
-        meta: { requiresAuth: true },
       },
       { path: 'daily', name: 'daily', component: DailyView },
       {
