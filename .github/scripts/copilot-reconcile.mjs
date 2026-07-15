@@ -611,7 +611,7 @@ function main() {
 
 // Only run when executed directly (`node copilot-reconcile.mjs`), not when imported by the
 // unit tests. This keeps the pure functions above importable without side effects.
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = Boolean(process.argv[1]) && (fileURLToPath(import.meta.url) === process.argv[1] || fileURLToPath(import.meta.url).endsWith(`/${process.argv[1]}`));
 if (isMain) {
   try {
     main();
