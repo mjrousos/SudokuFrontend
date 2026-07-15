@@ -99,7 +99,28 @@ describe('PlayView pause behaviour', () => {
 
     expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="pad-1"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="paused-banner"]').exists()).toBe(true);
+    const banner = wrapper.find('[data-testid="paused-banner"]');
+    expect(banner.exists()).toBe(true);
+    // Practice mode: button says "Resume"
+    expect(banner.text()).toContain('Resume');
+  });
+
+  it('shows "Show board" in the banner for non-Practice modes', async () => {
+    const games = useGamesStore();
+    const vm = { ...makeGameViewModel(), mode: GameMode.Ranked };
+    vi.spyOn(games, 'loadGame').mockImplementation(async (id) => {
+      games.byId = { [id]: vm };
+      return vm;
+    });
+
+    wrapper = mountView();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="btn-pause"]').trigger('click');
+
+    const banner = wrapper.find('[data-testid="paused-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('Show board');
   });
 
   it('restores the board and number pad after resuming', async () => {

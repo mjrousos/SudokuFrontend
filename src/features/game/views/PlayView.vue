@@ -285,7 +285,9 @@ const timerLabel = computed(() => {
             @pencil-toggle="onBoardPencilToggle"
           />
           <p v-if="paused" class="text-sm text-slate-500" data-testid="paused-banner">
-            Board hidden. Resume to continue.
+            Board hidden.
+            {{ currentGame.mode === GameMode.Practice ? 'Resume' : "Click 'Show board'" }} to
+            continue.
           </p>
         </div>
         <div class="space-y-4">
