@@ -180,7 +180,7 @@ A single scheduled **reconciler** (`.github/workflows/copilot-reconciler.yml`) l
 Copilot iterate on a pull request before a human is pulled in. It is a plain GitHub
 Actions workflow that, on each run, executes one well-commented Node script
 (`.github/scripts/copilot-reconcile.mjs`) — all the logic lives there. It scans open,
-non-fork PRs **authored by the Copilot coding agent** and applies three deterministic
+non-fork PRs **authored by the Copilot coding agent** and applies the following deterministic
 scenarios per PR:
 
 | Scenario | When | What it does |
