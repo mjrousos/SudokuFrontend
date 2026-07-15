@@ -9,6 +9,7 @@ import {
   buildMarker,
   parseMarkers,
   countPriorProds,
+  ownComments,
   isAlreadyAddressed,
 } from './copilot-reconcile.mjs';
 
@@ -198,11 +199,45 @@ describe('marker build/parse + dedup + prod counting', () => {
     expect(countPriorProds(undefined)).toBe(0);
   });
 
+  it('counts prods only since the most recent exhaustion boundary (reset works)', () => {
+    const comments = [
+      { body: `prod A ${buildMarker(1, 'aaa')}` },
+      { body: `prod B ${buildMarker(2, 'bbb')}` },
+      { body: 'exhausted…\n\n<!-- copilot-reconcile: exhausted -->' }, // boundary
+      { body: `prod C ${buildMarker(3, 'ccc')}` },
+    ];
+    // Only the prod after the boundary counts, so removing the label grants fresh rounds.
+    expect(countPriorProds(comments)).toBe(1);
+  });
+
   it('detects an already-addressed review by id (dedup), matching across string/number', () => {
     const comments = [{ body: `addressed ${buildMarker(7, 'sha7')}` }];
     expect(isAlreadyAddressed(comments, 7)).toBe(true);
     expect(isAlreadyAddressed(comments, '7')).toBe(true);
     expect(isAlreadyAddressed(comments, 8)).toBe(false);
     expect(isAlreadyAddressed([], 7)).toBe(false);
+  });
+});
+
+describe('ownComments (marker-forgery guard)', () => {
+  const cs = [
+    { user: { login: 'reconciler-bot' }, body: 'ours' },
+    { user: { login: 'attacker' }, body: 'forged' },
+    { user: null, body: 'no author' },
+  ];
+
+  it('keeps only comments authored by our own identity', () => {
+    expect(ownComments(cs, 'reconciler-bot')).toEqual([
+      { user: { login: 'reconciler-bot' }, body: 'ours' },
+    ]);
+  });
+
+  it('trusts nothing when the self login is unknown', () => {
+    expect(ownComments(cs, null)).toEqual([]);
+    expect(ownComments(cs, '')).toEqual([]);
+  });
+
+  it('tolerates empty / missing input', () => {
+    expect(ownComments(undefined, 'reconciler-bot')).toEqual([]);
   });
 });

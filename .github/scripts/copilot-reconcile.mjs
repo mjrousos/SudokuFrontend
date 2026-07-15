@@ -78,6 +78,12 @@ const LABEL_NEEDS_HUMAN = 'needs-human-review';
 // prod at most once per Copilot review, and (b) count prior prods for the exhaustion cap.
 const MARKER_RE = /copilot-reconcile:\s*addressed-review=(\S+)\s+head=(\S+)\s*-->/g;
 
+// Hidden marker on the exhaustion hand-off comment. It acts as a RESET BOUNDARY: prods are
+// counted only after the most recent exhaustion comment, so a human removing the
+// `copilot-loop-exhausted` label genuinely grants a fresh N rounds (rather than immediately
+// re-hitting the cap on the next actionable review).
+const EXHAUSTED_MARKER = '<!-- copilot-reconcile: exhausted -->';
+
 // ---------------------------------------------------------------------------
 // Pure decision functions (no I/O — unit-tested in copilot-reconcile.spec.ts)
 // ---------------------------------------------------------------------------
@@ -128,9 +134,32 @@ export function parseMarkers(commentBody) {
   return out;
 }
 
-/** Count how many prior comments are address-review prods (i.e. carry our marker). */
+/**
+ * Count prior `@copilot` prods on the PR, but only those SINCE the most recent exhaustion
+ * boundary (a comment carrying EXHAUSTED_MARKER). Counting since the boundary is what makes
+ * the documented reset work: removing the `copilot-loop-exhausted` label un-skips the PR and
+ * this counter starts fresh, granting another N rounds. `comments` must be in chronological
+ * order (the REST issue-comments endpoint returns oldest-first) and pre-filtered to our own
+ * authored comments (see ownComments) so a forged marker can't inflate the count.
+ */
 export function countPriorProds(comments) {
-  return (comments ?? []).filter((c) => parseMarkers(c.body).length > 0).length;
+  const list = comments ?? [];
+  let boundary = -1;
+  for (let i = 0; i < list.length; i++) {
+    if ((list[i].body ?? '').includes(EXHAUSTED_MARKER)) boundary = i;
+  }
+  return list.slice(boundary + 1).filter((c) => parseMarkers(c.body).length > 0).length;
+}
+
+/**
+ * Keep only comments authored by our own (PAT) identity. Marker text on other users'
+ * comments is UNTRUSTED — on a public repo anyone can post a comment with a forged hidden
+ * marker to suppress a prod, force exhaustion, or block the human hand-off. `selfLogin` is
+ * the login resolved from `gh api user`; if it is unknown, nothing is trusted.
+ */
+export function ownComments(comments, selfLogin) {
+  if (!selfLogin) return [];
+  return (comments ?? []).filter((c) => c.user?.login === selfLogin);
 }
 
 /** True when some prior comment has already addressed the given review id (dedup). */
@@ -188,6 +217,17 @@ function ghGraphql(query, vars) {
     else args.push('-f', `${k}=${v}`);
   }
   return ghJson(args);
+}
+
+/** Login of the authenticated (PAT) identity — used to distinguish our own marker comments
+ * from untrusted ones. Throws if it can't be resolved (a hard precondition). */
+function resolveSelfLogin() {
+  // `--jq .login` yields a bare string (not JSON), so read it directly rather than via ghJson.
+  const login = gh(['api', 'user', '--jq', '.login']).trim();
+  if (!login) {
+    throw new Error('Could not resolve the authenticated user login (gh api user).');
+  }
+  return login;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,15 +369,30 @@ export function selectReviewerThreadsForReview(nodes, reviewDatabaseId) {
  * Unresolved Copilot-reviewer threads that belong to the review identified by
  * `reviewDatabaseId` (the latest review's numeric id), with path:line metadata. See
  * selectReviewerThreadsForReview for why threads are scoped to a single review.
+ *
+ * Paginates every page of review threads: stale threads accumulate (the coding agent often
+ * can't resolve them) and are returned oldest-first, so on a long-lived PR the LATEST
+ * review's threads land on the last page — fetching only the first page would misclassify an
+ * actionable review as clean and trigger a premature human hand-off.
  */
 function getUnresolvedReviewerThreads(cfg, number, reviewDatabaseId) {
   const query =
-    'query($owner:String!,$repo:String!,$number:Int!){' +
+    'query($owner:String!,$repo:String!,$number:Int!,$cursor:String){' +
     'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
-    'reviewThreads(first:100){nodes{isResolved path line ' +
-    'comments(first:1){nodes{author{login} pullRequestReview{databaseId}}}}}}}}';
-  const data = ghGraphql(query, { owner: cfg.owner, repo: cfg.name, number });
-  const nodes = data?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+    'reviewThreads(first:100,after:$cursor){' +
+    'nodes{isResolved path line comments(first:1){nodes{author{login} pullRequestReview{databaseId}}}}' +
+    'pageInfo{hasNextPage endCursor}}}}}';
+  const nodes = [];
+  let cursor = null;
+  // Bound the loop defensively (50 pages = 5000 threads, far beyond any real PR).
+  for (let page = 0; page < 50; page++) {
+    const vars = { owner: cfg.owner, repo: cfg.name, number };
+    if (cursor) vars.cursor = cursor;
+    const conn = ghGraphql(query, vars)?.data?.repository?.pullRequest?.reviewThreads;
+    for (const n of conn?.nodes ?? []) nodes.push(n);
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
   return selectReviewerThreadsForReview(nodes, reviewDatabaseId);
 }
 
@@ -377,7 +432,9 @@ function addressReviewIfRequested(cfg, pr) {
   // rounds (which the coding agent often can't resolve) must not make a clean re-review look
   // actionable — see selectReviewerThreadsForReview.
   const unresolved = getUnresolvedReviewerThreads(cfg, pr.number, latest.id);
-  const comments = listComments(cfg, pr.number);
+  // Only trust markers on our OWN comments (see ownComments): on a public repo anyone can
+  // post a forged hidden marker to manipulate dedup / exhaustion / hand-off.
+  const comments = ownComments(listComments(cfg, pr.number), cfg.selfLogin);
   const actionable = classifyActionableReview({
     latestReview: latest,
     headSha,
@@ -416,7 +473,8 @@ function addressReviewIfRequested(cfg, pr) {
           cfg,
           pr.number,
           `Automated Copilot iteration is exhausted after ${cfg.roundCap} rounds; ` +
-            `a human should now review. (Remove the \`${LABEL_EXHAUSTED}\` label to resume automation.)`,
+            `a human should now review. (Remove the \`${LABEL_EXHAUSTED}\` label to resume automation.)` +
+            `\n\n${EXHAUSTED_MARKER}`,
         );
       },
     );
@@ -583,8 +641,10 @@ function errMsg(err) {
 
 function main() {
   const cfg = loadConfig();
+  // Resolve our own identity up front so we can trust only our own marker comments.
+  cfg.selfLogin = resolveSelfLogin();
   record(
-    `Reconciling ${cfg.repo} (dryRun=${cfg.dryRun}, roundCap=${cfg.roundCap}).`,
+    `Reconciling ${cfg.repo} as ${cfg.selfLogin} (dryRun=${cfg.dryRun}, roundCap=${cfg.roundCap}).`,
   );
 
   const prs = listCopilotPRs(cfg);
