@@ -59,10 +59,9 @@ This removes gh-aw as a dependency for these behaviors entirely (see "Cleanup" b
   with a summary body, **1 inline comment**, **1 unresolved review thread** (GraphQL
   `reviewThreads.nodes[] | select(.isResolved==false)`). A "nothing to change" review has
   **0** inline comments / unresolved threads.
-- **Requesting the Copilot reviewer:** the request target login is **`Copilot`**. While a
-  request is pending it appears in `pulls/{n}.requested_reviewers`; the issue timeline logs
-  a `review_requested` event with `requested_reviewer.login == "Copilot"`. Once Copilot
-  reviews, it leaves `requested_reviewers` (the pending request is consumed).
+- **Requesting the Copilot reviewer:** the REST login to request is **`copilot-pull-request-reviewer[bot]`**. While a
+  request is pending it typically appears in `pulls/{n}.requested_reviewers` as `Copilot` (display
+  login); once Copilot reviews, it leaves `requested_reviewers` (the pending request is consumed).
 - **Auth:** the existing **`GH_AW_GITHUB_TOKEN`** PAT (fine-grained, user-owned, Copilot
   license; scopes: Pull requests R/W, Issues R/W, Contents R) already drives the other
   workflows and is the right token here too.
