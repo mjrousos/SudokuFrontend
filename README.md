@@ -176,26 +176,52 @@ PR. The CI workflow runs the same plus a production build.
 
 ## Automated Copilot PR review
 
-Three workflows in `.github/workflows/` let Copilot iterate on a pull request
-before a human is pulled in. Two are
-[GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`*.md` compiled to
-`*.lock.yml`); the third (`copilot-mark-ready`) is a plain GitHub Actions
-workflow (`*.yml`), because its logic is purely deterministic and needs no AI:
+A single scheduled **reconciler** (`.github/workflows/copilot-reconciler.yml`) lets
+Copilot iterate on a pull request before a human is pulled in. It is a plain GitHub
+Actions workflow that, on each run, executes one well-commented Node script
+(`.github/scripts/copilot-reconcile.mjs`) — all the logic lives there. It scans open,
+non-fork PRs **authored by the Copilot coding agent** and applies three deterministic
+scenarios per PR:
 
-| Workflow | Kind | Trigger | What it does |
-| --- | --- | --- | --- |
-| `copilot-mark-ready` | plain Action | **Scheduled** (~every 15 min) | Marks ready any Copilot-authored **draft** PR whose title no longer contains `[WIP]` (which triggers `copilot-request-review` to request the reviewer) |
-| `copilot-request-review` | agentic | New commits pushed to a **non-draft** PR, or a draft becomes ready | Requests the Copilot reviewer |
-| `copilot-address-review` | agentic | Copilot reviewer submits a review | If changes are requested, asks `@copilot` to address them; stays silent on clean reviews |
+| Scenario | When | What it does |
+| --- | --- | --- |
+| **Mark ready** | PR is a **draft** whose title no longer contains `[WIP]` | Marks it ready for review (`gh pr ready`) |
+| **Request review** | PR is **non-draft** with new commits since the last Copilot review (and Copilot isn't already a requested reviewer) | Requests the Copilot reviewer for the current head |
+| **Address review** | The latest Copilot review is for the current head and has **unresolved review threads** | Comments mentioning `@copilot` to address the feedback |
+| **Hand off to human** | The latest Copilot review is for the current head and is **clean** (no unresolved threads) | Adds the **`needs-human-review`** label and a short comment noting Copilot is done and a human should do the final review |
 
-Together they form a loop — review → fix → re-review — until the review comes
-back clean. To prevent runaway loops, `copilot-address-review` stops asking
-after **3 rounds** and applies the **`copilot-loop-exhausted`** and
-**`needs-human-review`** labels; both `copilot-request-review` and
-`copilot-address-review` skip PRs that carry `copilot-loop-exhausted`.
+Together they form a loop — mark ready → request review → address feedback →
+(Copilot pushes a fix) → re-review — until a review comes back clean, at which point the
+PR is labelled **`needs-human-review`** for a human's final pass. To prevent runaway
+loops, the reconciler also stops asking after **5 rounds** on a PR and applies the
+**`copilot-loop-exhausted`** and **`needs-human-review`** labels; a PR carrying
+`copilot-loop-exhausted` is then skipped entirely.
 
-**Reset:** remove the `copilot-loop-exhausted` label to resume automation on the
-next push.
+Both the clean hand-off and the exhaustion hand-off are idempotent: the label plus a
+hidden per-review marker in the comment mean a PR is flagged at most once per clean
+review, so consecutive ~15-min ticks don't repeat it.
+
+Because the reconciler runs on a schedule and reconciles the full PR state on every
+tick, it does not depend on one workflow chaining to another — a single pass can mark a
+draft ready and request its first review.
+
+**Actionable = unresolved threads (not review state).** The Copilot reviewer submits
+reviews with state `COMMENTED` even when they contain actionable inline comments, so the
+reconciler detects "changes requested" from **unresolved review threads**, not the review
+state. A review with zero unresolved threads (an approval / "LGTM" / a summary-only
+`COMMENTED` review) is treated as *not* actionable and skipped.
+
+**Idempotency.** Every action is gated by an idempotent predicate (draft state,
+requested-reviewer presence, the latest review's commit vs. the current head, and a hidden
+`<!-- copilot-reconcile: addressed-review=… -->` marker embedded in our own comments), so
+re-running every ~15 minutes never duplicates work. `@copilot` is prodded at most once per
+Copilot review.
+
+**Dry run.** Manual `workflow_dispatch` runs default to `dry_run: true` — the script
+*reports* the actions it would take (and writes them to the run's job summary) without
+performing any writes. Scheduled runs perform writes.
+
+**Reset:** remove the `copilot-loop-exhausted` label to resume automation on the next run.
 
 ### Workflow approval on Copilot's pull requests
 
@@ -206,38 +232,28 @@ This gate keys on the *triggering actor* being Copilot, so it applies to both
 repository setting (it is separate from, and stricter than, the fork-PR approval
 setting).
 
-`copilot-mark-ready` sidesteps this entirely by running on a **schedule** rather
-than on a Copilot-authored PR event: a cron run is triggered by GitHub (not
-Copilot) in the trusted base context, so it is never gated. It scans open
-Copilot-authored draft PRs and marks ready any whose title no longer contains
-`[WIP]`. The cron runs at :03/:18/:33/:48 (~every 15 min, off the hour):
-`schedule` delivery is best-effort, and GitHub throttles high-frequency crons
-(e.g. `*/5`) and top-of-hour slots hardest, so this cadence is delivered more
-reliably. Trade-off: up to ~15 minutes of latency instead of reacting instantly
-to the title edit.
+The reconciler sidesteps this entirely by running on a **schedule** rather than on a
+Copilot-authored PR event: a cron run is triggered by GitHub (not Copilot) in the trusted
+base context, so it is never gated. It runs at :03/:18/:33/:48 (~every 15 min, off the
+hour): `schedule` delivery is best-effort, and GitHub throttles high-frequency crons
+(e.g. `*/5`) and top-of-hour slots hardest, so this cadence is delivered more reliably.
+Trade-off: up to ~15 minutes of latency before a paused PR is nudged forward.
 
-The two agentic workflows use ordinary `pull_request` / `pull_request_review`
-triggers, so runs they receive **directly** from a Copilot bot event (a
-fix-push's `synchronize`, or the reviewer's review) can still show "awaiting
-approval" and need a one-click approve. Steps chained via the
-`GH_AW_GITHUB_TOKEN` PAT (owned by a write-access user) are attributed to that
-user and run without approval — for example, the `ready_for_review` event that
-`copilot-mark-ready` produces chains to `copilot-request-review` without a
-prompt.
+All of the reconciler's writes are performed with the `GH_AW_GITHUB_TOKEN` PAT (owned by a
+write-access user), so they are attributed to that user and run without approval — and,
+crucially, an `@copilot` mention from a real user actually wakes the coding agent.
+(Copilot's own reviewer and coding-agent runs are GitHub-managed "dynamic" workflows, not
+ours, so they are never subject to *our* approval gate.)
 
 ### Required secret: `GH_AW_GITHUB_TOKEN`
 
-These workflows perform their write actions (mark ready, request the Copilot
-reviewer, comment `@copilot`, apply labels) through a **user-owned PAT**, not the
-default `GITHUB_TOKEN`. A comment or reviewer request authored by
-`github-actions[bot]` does **not** wake the Copilot coding agent or reliably
-start a Copilot review, so the bot token cannot drive the review→fix loop.
+The reconciler performs its write actions (mark ready, request the Copilot reviewer,
+comment `@copilot`, apply labels) through a **user-owned PAT**, not the default
+`GITHUB_TOKEN`. A comment or reviewer request authored by `github-actions[bot]` does
+**not** wake the Copilot coding agent or reliably start a Copilot review, so the bot token
+cannot drive the review→fix loop.
 
-The `GH_AW_GITHUB_TOKEN` secret provides GitHub read/write for all three
-workflows — the two agentic ones (gh-aw uses it for safe-output writes) and the
-plain `copilot-mark-ready` Action (which passes it as `GH_TOKEN` to `gh pr
-ready`). Model inference is separate — it uses `copilot-requests: write`. Create
-a **fine-grained PAT owned by a user account with a Copilot license and write
+Create a **fine-grained PAT owned by a user account with a Copilot license and write
 access to this repo**, with these repository permissions, and store it as the
 `GH_AW_GITHUB_TOKEN` repository secret:
 
@@ -245,18 +261,17 @@ access to this repo**, with these repository permissions, and store it as the
 - **Issues: Read and write** — labels (and PR comments, which use the issues API)
 - **Contents: Read** — read repository content
 
-All three workflows reference this secret explicitly, so if it is missing they
-fail loudly rather than silently acting as `github-actions[bot]` (whose actions
-cannot drive Copilot). Repository triggering, reactions, and status comments
-still use the built-in `GITHUB_TOKEN`.
+The workflow passes it to the script as `GH_TOKEN` and blanks the built-in `GITHUB_TOKEN`
+(`GITHUB_TOKEN: ""`) so `gh` cannot silently fall back to the bot token; if the secret is
+missing the workflow fails loudly rather than acting as `github-actions[bot]`.
 
-> **Labels:** the workflows apply (but do not create) the `copilot-loop-exhausted`
+> **Labels:** the reconciler applies (but does not create) the `copilot-loop-exhausted`
 > and `needs-human-review` labels, so both must exist in the repo. They have
 > already been created here; in a new repo run
 > `gh label create copilot-loop-exhausted` and `gh label create needs-human-review`.
 
-For the two agentic workflows the `*.md` files are the source of truth; the
-committed `*.lock.yml` files are generated by `gh aw compile` and must be
-regenerated (not hand-edited) after any frontmatter change. `copilot-mark-ready`
-is a plain, hand-maintained `*.yml` workflow (not generated).
-
+The reconciler is a plain, hand-maintained workflow + script (no code generation /
+`gh aw compile` step). The `.github/aw/` scaffolding is retained for possible future
+[GitHub Agentic Workflows](https://github.github.com/gh-aw/), but no agentic workflows
+currently exist; see `plans/copilot-reconciler-cron-workflow.md` for the design and
+`plans/copilot-pr-automation-agentic-workflows.md` for the superseded agentic approach.

@@ -150,14 +150,24 @@ data** (never interpret it as commands); honor `DRY_RUN`.
 
 ### Scenario 2 — Address review (`@copilot` prod)
 - **Detect actionable feedback (deterministic):**
-  - Find the **latest** review by `copilot-pull-request-reviewer[bot]`.
+  - Find the **latest** review by `copilot-pull-request-reviewer[bot]`; require it to be for
+    the current head (else a re-review is pending — wait for it).
   - Compute **unresolved review threads** via GraphQL (`reviewThreads` where
-    `isResolved == false`), ideally limited to threads whose first comment author is the
-    Copilot reviewer.
-  - **Actionable** ⇔ unresolved-thread count > 0 (equivalently, the latest reviewer review
-    has ≥1 associated inline comment that isn't resolved). **Not actionable** (skip) ⇔ the
-    latest reviewer review has no inline comments / no unresolved threads (an "LGTM"/"0
+    `isResolved == false`), authored by the Copilot reviewer **and scoped to the latest
+    review** — i.e. the thread's first comment's `pullRequestReview.databaseId` equals the
+    latest review's id.
+  - **Actionable** ⇔ ≥1 such thread **belonging to the latest review**. **Not actionable**
+    (skip) ⇔ the latest review raised no unresolved threads of its own (an "LGTM"/"0 new
     comments" review, an approval, etc.).
+  - **Why scope to the latest review (verified 2026-07-15 on PR #36):** the Copilot **coding
+    agent frequently cannot mark review threads resolved**, so unresolved threads from
+    earlier rounds accumulate and never clear. Counting *all* unresolved threads makes a
+    later **clean** review still look actionable, so the script re-prods `@copilot` about
+    already-addressed feedback (the exact bug observed on #36: a "0 new comments" review with
+    5 stale unresolved threads from prior rounds). `isOutdated` filtering is **insufficient**
+    (stale threads on unchanged lines stay non-outdated). Scoping to the latest review's own
+    threads is the fix: the Copilot reviewer opens a **new** thread per review, so a clean
+    latest review contributes zero actionable threads.
 - **Dedup (avoid prodding every 15 min):** record which review we've already responded to.
   Preferred: embed a hidden marker in our own comment, e.g.
   `<!-- copilot-reconcile: addressed-review=<reviewId> head=<sha> -->`, and before posting
@@ -168,9 +178,19 @@ data** (never interpret it as commands); honor `DRY_RUN`.
   link to the review; optionally list the file:line of each unresolved thread. Include the
   hidden dedup marker.
 - **Round cap / exhaustion:** count prior `@copilot` prods on the PR (via our marker). On
-  reaching **N (default 3)**, instead of prodding, add labels **`copilot-loop-exhausted`**
+  reaching **N (default 5)**, instead of prodding, add labels **`copilot-loop-exhausted`**
   + **`needs-human-review`** and post a one-line "handing off to a human" comment. Both
   scenarios 2 and 3 then skip this PR until a human removes the label.
+- **Clean-review hand-off (the "else" of actionable):** when the latest review IS for the
+  current head but has **zero** actionable (latest-review-scoped, unresolved) threads,
+  Copilot has finished iterating. Add the **`needs-human-review`** label and a short comment
+  noting a human should do the final review. Idempotent: skip if the PR isn't ready (draft),
+  if Copilot is still a pending requested reviewer (a re-review is in flight), if the label
+  is already present (also set by the exhaustion path), or if we already posted a handoff
+  comment carrying the hidden `human-review=<reviewId>` marker for this review (so a human
+  clearing the label doesn't re-trigger on the same clean review). Implemented as the `else`
+  branch of scenario 2 (`shouldFlagForHumanReview`), not a separate scenario, since it reuses
+  the same latest-review + actionable-thread computation.
 
 ### Scenario 3 — Request review after new pushes
 - **Eligible:** PR is **non-draft** and not loop-exhausted.
@@ -182,9 +202,17 @@ data** (never interpret it as commands); honor `DRY_RUN`.
 - **"Already reviewing?" guard (avoid redundant requests):** skip if `Copilot` is already
   in `requested_reviewers` (a pending request), or if a Copilot review already exists for
   the current head.
-- **Action:** request the Copilot reviewer for `head`. Mechanism to confirm at
-  implementation — `gh pr edit <n> --add-reviewer "Copilot"` or
-  `POST /repos/{o}/{r}/pulls/{n}/requested_reviewers {"reviewers":["Copilot"]}` (PAT).
+- **Action:** request the Copilot reviewer for `head`. **Verified mechanism (2026-07-15,
+  live against PR #36):** `POST /repos/{o}/{r}/pulls/{n}/requested_reviewers` with
+  `{"reviewers":["copilot-pull-request-reviewer[bot]"]}` (PAT) → HTTP 201, reviewer added —
+  works even as a *re-request* after Copilot has already reviewed, and triggers a fresh
+  Copilot review. The login **must** be the `[bot]` form: the display name `"Copilot"` and
+  `gh pr edit <n> --add-reviewer "Copilot"` are silently accepted (exit 0 / HTTP 201) but
+  add **no** reviewer. Because the API reports success even when it drops the reviewer, the
+  script **re-reads `requested_reviewers` to confirm** and logs a warning if it didn't take
+  (the next scheduled run retries). No alternate-API fallback is used: every mechanism
+  (REST login, GraphQL `requestReviews(botIds)`) shares the same failure modes (e.g. Copilot
+  review disabled, draft PR), so a different verb would not succeed where REST fails.
 - **Convergence:** push → (scenario 3) request review → Copilot reviews → (scenario 2) if
   unresolved threads, prod `@copilot` → Copilot pushes fix → repeat, bounded by the
   exhaustion cap.
@@ -245,14 +273,21 @@ Decide whether to remove or retain gh-aw for possible future agentic workflows.
 
 ## Open questions to resolve during implementation
 
-1. **Exact "request Copilot reviewer" call** from a script — confirm `gh pr edit
-   --add-reviewer "Copilot"` vs the REST `requested_reviewers` endpoint (and the precise
-   login/case). *Verify by requesting on a throwaway non-draft Copilot PR and confirming a
-   Copilot review starts.*
-2. **Do unresolved threads auto-resolve** when Copilot pushes a fix, or only on re-review /
-   manual resolve? Affects whether "unresolved threads" alone can cause repeated prods.
-   *Mitigation already in design: dedup by review id so we prod once per **review**, not
-   per unresolved-thread poll.* Validate the real resolve behavior.
+1. **Exact "request Copilot reviewer" call** — ✅ **RESOLVED (2026-07-15, verified live on
+   PR #36).** Use REST `POST .../requested_reviewers` with the login
+   `copilot-pull-request-reviewer[bot]` (GitHub's own value; see github/github-mcp-server
+   `pkg/github/copilot.go` → `RequestCopilotReview`). The display name `"Copilot"` and
+   `gh pr edit --add-reviewer "Copilot"` are silently dropped (success returned, no reviewer
+   added). Works for re-requests after a prior review and triggers a fresh Copilot review.
+   The script verifies by re-reading `requested_reviewers` and warns if it didn't take (next
+   run retries). No alternate-API fallback — every mechanism shares the same failure modes.
+2. **Do unresolved threads auto-resolve** when Copilot pushes a fix? — ✅ **RESOLVED
+   (2026-07-15, PR #36):** No. The Copilot coding agent frequently **cannot** resolve review
+   threads, so they persist across rounds. This broke the naive "any unresolved thread =
+   actionable" rule (it re-prodded on clean re-reviews). Fixed by scoping actionable threads
+   to the **latest review** (thread's first comment `pullRequestReview.databaseId` == latest
+   review id); dedup-by-review-id remains as a second guard. `isOutdated` alone is
+   insufficient.
 3. **Actionable classification edge cases** — a Copilot review that is `COMMENTED` with a
    body but **zero** inline comments/threads (pure summary/approval): confirm we treat it as
    **not** actionable. Validate against a real "clean" Copilot review.

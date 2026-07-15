@@ -1,5 +1,13 @@
 # Plan: GitHub Agentic Workflows to automate Copilot PR interactions
 
+> **Superseded (2026-07):** the two agentic workflows described here
+> (`copilot-address-review`, `copilot-request-review`) and the plain
+> `copilot-mark-ready` Action have been consolidated into a single cron-triggered
+> **reconciler** (`.github/workflows/copilot-reconciler.yml` +
+> `.github/scripts/copilot-reconcile.mjs`). See
+> [`plans/copilot-reconciler-cron-workflow.md`](./copilot-reconciler-cron-workflow.md)
+> for the successor design. This document is retained for historical context.
+
 ## Problem & goal
 
 Reduce human involvement in PR review by letting GitHub Copilot iterate to a clean

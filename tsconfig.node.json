@@ -6,7 +6,8 @@
     "playwright.config.ts",
     "tailwind.config.ts",
     "postcss.config.js",
-    "scripts/**/*"
+    "scripts/**/*",
+    ".github/scripts/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -15,6 +16,11 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "skipLibCheck": true,
+    // Allow the reconciler unit tests (.github/scripts/*.spec.ts) to import the plain
+    // Node ESM reconciler script (copilot-reconcile.mjs) without a declaration file. The
+    // script's own loose JS is deliberately not type-checked (checkJs: false).
+    "allowJs": true,
+    "checkJs": false,
     "types": ["node"]
   }
 }
