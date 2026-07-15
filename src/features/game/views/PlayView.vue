@@ -41,6 +41,8 @@ const timer = useTimer({
 async function load(): Promise<void> {
   loading.value = true;
   loadError.value = null;
+  paused.value = false;
+  pencilMode.value = false;
   try {
     const vm = await games.loadGame(props.gameId);
     selected.value = findFirstEmpty(vm) ?? [0, 0];

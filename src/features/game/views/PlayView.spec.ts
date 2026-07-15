@@ -123,6 +123,33 @@ describe('PlayView pause behaviour', () => {
     expect(banner.text()).toContain('Show board');
   });
 
+  it('resets paused state when loading a new game', async () => {
+    const games = useGamesStore();
+    let callCount = 0;
+    vi.spyOn(games, 'loadGame').mockImplementation(async (id) => {
+      callCount++;
+      const vm = makeGameViewModel(id);
+      games.byId = { ...games.byId, [id]: vm };
+      return vm;
+    });
+
+    wrapper = mountView('g1');
+    await flushPromises();
+
+    // Pause the first game
+    await wrapper.get('[data-testid="btn-pause"]').trigger('click');
+    expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(false);
+
+    // Navigate to a different game by changing the gameId prop
+    await wrapper.setProps({ gameId: 'g2' });
+    await flushPromises();
+
+    expect(callCount).toBe(2);
+    // Board should be visible again — paused was reset by load()
+    expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="paused-banner"]').exists()).toBe(false);
+  });
+
   it('restores the board and number pad after resuming', async () => {
     const games = useGamesStore();
     const vm = makeGameViewModel();
