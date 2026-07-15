@@ -41,6 +41,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { appendFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Constants (logins, labels, marker)
@@ -128,7 +129,11 @@ export function buildMarker(reviewId, headSha) {
 export function parseMarkers(commentBody) {
   const out = [];
   if (!commentBody) return out;
-  for (const m of commentBody.matchAll(MARKER_RE)) {
+  // Use a FRESH regex per call. matchAll seeds its internal clone from the source regex's
+  // `lastIndex`, so sharing one stateful global (/g) regex risks silently missing early
+  // markers if `lastIndex` is ever left non-zero. A per-call instance has no shared state.
+  const re = new RegExp(MARKER_RE.source, 'g');
+  for (const m of commentBody.matchAll(re)) {
     out.push({ reviewId: m[1], head: m[2] });
   }
   return out;
@@ -670,8 +675,11 @@ function main() {
 }
 
 // Only run when executed directly (`node copilot-reconcile.mjs`), not when imported by the
-// unit tests. This keeps the pure functions above importable without side effects.
-const isMain = Boolean(process.argv[1]) && (fileURLToPath(import.meta.url) === process.argv[1] || fileURLToPath(import.meta.url).endsWith(`/${process.argv[1]}`));
+// unit tests. This keeps the pure functions above importable without side effects. Normalize
+// argv[1] to an absolute path first (path.resolve handles relative and `./`-prefixed forms),
+// so the reconciler runs regardless of how the workflow invokes it.
+const isMain =
+  Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === resolvePath(process.argv[1]);
 if (isMain) {
   try {
     main();

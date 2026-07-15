@@ -188,6 +188,14 @@ describe('marker build/parse + dedup + prod counting', () => {
     expect(parseMarkers(undefined)).toEqual([]);
   });
 
+  it('is stateless across repeated calls (no shared global-regex lastIndex)', () => {
+    const body = `${buildMarker(1, 'a')} ${buildMarker(2, 'b')} ${buildMarker(3, 'c')}`;
+    const first = parseMarkers(body);
+    const second = parseMarkers(body);
+    expect(first).toHaveLength(3);
+    expect(second).toEqual(first);
+  });
+
   it('counts only comments that carry our marker as prods', () => {
     const comments = [
       { body: 'unrelated human comment' },
