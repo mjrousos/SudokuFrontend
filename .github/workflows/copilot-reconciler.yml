@@ -73,8 +73,11 @@ jobs:
           # Prevent gh from silently falling back to the workflow's built-in token.
           GITHUB_TOKEN: ""
           REPO: ${{ github.repository }}
-          # Scheduled runs (no input) perform writes; manual dispatch honors the dry_run input.
-          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          # DRY_RUN gates every write. Reference `github.event.inputs` (which always exists —
+          # it is null on non-dispatch events) rather than the `inputs` context, which can
+          # raise "Unrecognized named-value: 'inputs'" on scheduled runs. Net effect:
+          # scheduled runs → 'false' (writes on); manual dispatch honors the dry_run input.
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           # Number of @copilot address-review prods on one PR before handing off to a human.
           ROUND_CAP: "5"
         run: node .github/scripts/copilot-reconcile.mjs
