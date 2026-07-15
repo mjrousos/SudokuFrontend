@@ -296,7 +296,7 @@ Decide whether to remove or retain gh-aw for possible future agentic workflows.
    prod before the next review. Confirm timeline signals if we want a stronger guard.
 5. **Script language sign-off** — confirm Node `.mjs` (recommended) vs Bash.
 6. **Cadence** — 15 min (recommended, matches proven mark-ready) vs hourly.
-7. **Round cap N** — default 3; confirm.
+7. **Round cap N** — default 5; confirm.
 
 ## Validation & testing strategy
 
