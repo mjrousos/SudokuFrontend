@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { pushMock } = vi.hoisted(() => ({
   pushMock: vi.fn(),
@@ -59,6 +59,13 @@ beforeEach(() => {
   pushMock.mockReset();
 });
 
+let wrapper: ReturnType<typeof mountView> | null = null;
+
+afterEach(() => {
+  wrapper?.unmount();
+  wrapper = null;
+});
+
 describe('PlayView pause behaviour', () => {
   it('shows the board and number pad when not paused', async () => {
     const games = useGamesStore();
@@ -68,7 +75,7 @@ describe('PlayView pause behaviour', () => {
       return vm;
     });
 
-    const wrapper = mountView();
+    wrapper = mountView();
     await flushPromises();
 
     expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(true);
@@ -84,7 +91,7 @@ describe('PlayView pause behaviour', () => {
       return vm;
     });
 
-    const wrapper = mountView();
+    wrapper = mountView();
     await flushPromises();
 
     // Pause via the toolbar button
@@ -103,7 +110,7 @@ describe('PlayView pause behaviour', () => {
       return vm;
     });
 
-    const wrapper = mountView();
+    wrapper = mountView();
     await flushPromises();
 
     // Pause then resume
