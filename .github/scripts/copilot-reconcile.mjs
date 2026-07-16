@@ -621,7 +621,13 @@ function requestCopilotReviewer(cfg, number) {
   } catch (err) {
     record(`PR #${number}: REST reviewer request errored (${errMsg(err)})`);
   }
-  return isCopilotRequested(cfg, number);
+
+  try {
+    return isCopilotRequested(cfg, number);
+  } catch (err) {
+    record(`PR #${number}: failed to confirm requested reviewers (${errMsg(err)})`);
+    return false;
+  }
 }
 
 /** Re-read the PR and report whether the Copilot reviewer is currently requested. */
