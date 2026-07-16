@@ -112,7 +112,13 @@ describe('PlayView pause/resume', () => {
     vi.spyOn(games, 'loadGame').mockResolvedValue(vm);
     games.byId['g-test'] = vm;
 
-    const wrapper = mountPlayView();
+    const wrapper = mount(PlayView, {
+      props: { gameId: 'g-test' },
+      attachTo: document.body,
+      global: {
+        stubs: { teleport: true },
+      },
+    });
     await flushPromises();
 
     // Pause
@@ -122,8 +128,12 @@ describe('PlayView pause/resume', () => {
 
     // Resume
     await wrapper.get('[data-testid="btn-pause"]').trigger('click');
+    await flushPromises();
     expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pad-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="paused-banner"]').exists()).toBe(false);
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('cell-0-2');
+
+    wrapper.unmount();
   });
 });

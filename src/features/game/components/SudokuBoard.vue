@@ -102,6 +102,7 @@ watch(
         ?.focus();
     });
   },
+  { immediate: true },
 );
 </script>
 
