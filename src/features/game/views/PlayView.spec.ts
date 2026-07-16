@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -129,6 +130,7 @@ describe('PlayView pause/resume', () => {
     // Resume
     await wrapper.get('[data-testid="btn-pause"]').trigger('click');
     await flushPromises();
+    await nextTick(); // allow inner nextTick in SudokuBoard's selected-cell watcher to settle
     expect(wrapper.find('[data-testid="sudoku-board"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pad-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="paused-banner"]').exists()).toBe(false);
