@@ -48,8 +48,8 @@ import { resolve as resolvePath } from 'node:path';
 // ---------------------------------------------------------------------------
 
 // The Copilot coding agent authors PRs under this login (`gh` reports
-// `app/copilot-swe-agent`; the bot / display forms are accepted for robustness across API
-// surfaces). Scoping every scenario to this author honors "only Copilot-created PRs".
+// `app/copilot-swe-agent`; the bot form is accepted for robustness across API surfaces).
+// Scoping every scenario to this author honors "only Copilot-created PRs".
 const COPILOT_AUTHOR_RE = /copilot-swe-agent/i;
 
 // The Copilot reviewer bot. NOTE: its reviews carry state "COMMENTED" even when they hold
