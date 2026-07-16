@@ -245,7 +245,9 @@ function loadConfig() {
     throw new Error('REPO env must be set to "owner/repo".');
   }
   const [owner, name] = repo.split('/');
-  const roundCap = Number.parseInt(process.env.ROUND_CAP ?? '5', 10);
+  const parsedRoundCap = Number.parseInt(process.env.ROUND_CAP ?? '5', 10);
+  const roundCap =
+    Number.isFinite(parsedRoundCap) && parsedRoundCap > 0 ? parsedRoundCap : 5;
   return {
     repo,
     owner,
@@ -253,7 +255,7 @@ function loadConfig() {
     // DRY_RUN=true reports actions without performing writes. Any value other than the
     // exact string "true" (including empty on scheduled runs) means writes are ON.
     dryRun: (process.env.DRY_RUN ?? 'false').toLowerCase() === 'true',
-    roundCap: Number.isNaN(roundCap) ? 5 : roundCap,
+    roundCap,
   };
 }
 
