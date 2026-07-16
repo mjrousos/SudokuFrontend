@@ -208,8 +208,8 @@ draft ready and request its first review.
 **Actionable = unresolved threads (not review state).** The Copilot reviewer submits
 reviews with state `COMMENTED` even when they contain actionable inline comments, so the
 reconciler detects "changes requested" from **unresolved review threads**, not the review
-state. A review with zero unresolved threads (an approval / "LGTM" / a summary-only
-`COMMENTED` review) is treated as *not* actionable and skipped.
+state. A review with zero unresolved threads is treated as *not* actionable for `@copilot`
+prodding; if it is for the current head, the reconciler instead hands off to a human.
 
 **Idempotency.** Every action is gated by an idempotent predicate (draft state,
 requested-reviewer presence, the latest review's commit vs. the current head, and a hidden
