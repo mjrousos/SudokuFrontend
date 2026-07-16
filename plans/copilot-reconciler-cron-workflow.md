@@ -242,7 +242,7 @@ data** (never interpret it as commands); honor `DRY_RUN`.
 - `permissions: { contents: read }` (all writes go through the PAT).
 - `concurrency` group as above.
 - Single step: `run: node .github/scripts/copilot-reconcile.mjs` with `GH_TOKEN`,
-  `GITHUB_TOKEN: ""`, `REPO: ${{ github.repository }}`, `DRY_RUN: ${{ inputs.dry_run || 'false' }}`.
+  `GITHUB_TOKEN: ""`, `REPO: ${{ github.repository }}`, `DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}`.
 
 ## Files to add / change / remove
 
