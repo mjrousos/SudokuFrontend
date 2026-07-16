@@ -9,7 +9,14 @@ export default mergeConfig(
       environment: 'happy-dom',
       globals: true,
       exclude: [...configDefaults.exclude, 'tests/e2e/**'],
-      include: ['src/**/*.{test,spec}.ts', 'tests/unit/**/*.{test,spec}.ts'],
+      include: [
+        'src/**/*.{test,spec}.ts',
+        'tests/unit/**/*.{test,spec}.ts',
+        // Unit tests for the Copilot PR reconciler's pure decision functions
+        // (.github/scripts/copilot-reconcile.mjs). Coverage `include` below is
+        // intentionally left src-only, so these do not affect coverage thresholds.
+        '.github/scripts/**/*.{test,spec}.ts',
+      ],
       setupFiles: ['./tests/unit/setup.ts'],
       root: fileURLToPath(new URL('./', import.meta.url)),
       coverage: {

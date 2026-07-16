@@ -1,0 +1,83 @@
+# Copilot PR reconciler — a single, cron-triggered "reconciler" that periodically prods
+# along Copilot coding-agent work that is paused between steps. It supersedes the earlier
+# copilot-mark-ready.yml and the two agentic gh-aw workflows (copilot-address-review /
+# copilot-request-review); all of their behavior now lives in the well-commented script
+# .github/scripts/copilot-reconcile.mjs. See plans/copilot-reconciler-cron-workflow.md and
+# the README ("Automated Copilot PR review") for the design.
+#
+# WHY A SCHEDULE (and not pull_request): GitHub does not run Actions automatically on events
+# triggered by the Copilot coding agent — the "Approve and run workflows" gate keys on the
+# triggering actor being Copilot, so it applies to `pull_request` AND `pull_request_target`
+# and cannot be disabled by a repo setting. A scheduled run is triggered by GitHub's
+# scheduler (a non-Copilot actor) in the trusted base context, so it is never gated.
+#
+# All GitHub writes are performed by the script through the GH_AW_GITHUB_TOKEN PAT (passed as
+# GH_TOKEN), so they are attributed to a real user — which both avoids the approval gate and
+# lets an `@copilot` mention actually wake the coding agent (a github-actions[bot] mention
+# does not). The built-in GITHUB_TOKEN is blanked so `gh` cannot silently fall back to it.
+name: Copilot PR reconciler
+
+on:
+  # Poll ~every 15 min, at :03/:18/:33/:48. Cron is triggered by GitHub (a non-Copilot
+  # actor), which is what lets this bypass the Copilot workflow-approval gate. `schedule` is
+  # best-effort: GitHub delays or drops runs under load, and high-frequency crons (e.g. */5)
+  # and the top of each hour are the worst-affected — this off-the-hour, ~15-minute cadence
+  # is delivered more reliably, at the cost of a little latency.
+  schedule:
+    - cron: "3,18,33,48 * * * *"
+  # Manual runs (from the Actions tab) default to a DRY RUN so the reported actions can be
+  # reviewed safely before enabling writes. Scheduled runs perform writes.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report actions without performing any writes"
+        type: boolean
+        default: true
+
+# All GitHub calls go through the PAT (GH_TOKEN), so the built-in GITHUB_TOKEN needs no
+# elevated scope. Keep it read-only.
+permissions:
+  contents: read
+
+# Never let two reconcile passes overlap.
+concurrency:
+  group: copilot-reconciler
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile Copilot PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate GH_AW_GITHUB_TOKEN is configured
+        env:
+          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$GH_AW_GITHUB_TOKEN" ]; then
+            echo "GH_AW_GITHUB_TOKEN secret is required (do not fall back to GITHUB_TOKEN)." >&2
+            exit 1
+          fi
+
+      - name: Checkout (for the reconcile script)
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Reconcile Copilot PRs
+        env:
+          # PAT so every write is user-authored (avoids the approval gate; wakes Copilot).
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          # Prevent gh from silently falling back to the workflow's built-in token.
+          GITHUB_TOKEN: ""
+          REPO: ${{ github.repository }}
+          # DRY_RUN gates every write. Reference `github.event.inputs` (which always exists —
+          # it is null on non-dispatch events) rather than the `inputs` context, which can
+          # raise "Unrecognized named-value: 'inputs'" on scheduled runs. Net effect:
+          # scheduled runs → 'false' (writes on); manual dispatch honors the dry_run input.
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          # Number of @copilot address-review prods on one PR before handing off to a human.
+          ROUND_CAP: "5"
+        run: node .github/scripts/copilot-reconcile.mjs
