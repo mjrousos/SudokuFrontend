@@ -274,10 +274,11 @@ const timerLabel = computed(() => {
       <div class="grid gap-6 md:grid-cols-[auto_1fr]">
         <div class="space-y-3">
           <SudokuBoard
+            v-if="!paused"
             :grid="currentGame.grid"
             :selected="selected"
             :pencil-mode="pencilMode"
-            :disabled="paused || currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== 'InProgress'"
             @select="onSelect"
             @digit="onBoardDigit"
             @clear="onBoardClear"
@@ -302,8 +303,9 @@ const timerLabel = computed(() => {
             @abandon="askAbandon"
           />
           <NumberPad
+            v-if="!paused"
             :pencil-mode="pencilMode"
-            :disabled="paused || currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== 'InProgress'"
             @digit="applyDigit"
             @clear="applyDigit(0)"
             @pencil-toggle="pencilMode = !pencilMode"
