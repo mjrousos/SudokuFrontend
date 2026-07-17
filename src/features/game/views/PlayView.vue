@@ -278,7 +278,7 @@ const timerLabel = computed(() => {
             :grid="currentGame.grid"
             :selected="selected"
             :pencil-mode="pencilMode"
-            :disabled="currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== GameStatus.InProgress"
             @select="onSelect"
             @digit="onBoardDigit"
             @clear="onBoardClear"
@@ -305,7 +305,7 @@ const timerLabel = computed(() => {
           <NumberPad
             v-if="!paused"
             :pencil-mode="pencilMode"
-            :disabled="currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== GameStatus.InProgress"
             @digit="applyDigit"
             @clear="applyDigit(0)"
             @pencil-toggle="pencilMode = !pencilMode"
