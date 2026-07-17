@@ -263,7 +263,7 @@ const timerLabel = computed(() => {
           {{ currentGame.mode }} · {{ currentGame.difficulty }}
         </h1>
         <span
-          v-if="currentGame.status !== 'InProgress'"
+          v-if="currentGame.status !== GameStatus.InProgress"
           class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide"
           data-testid="status-badge"
         >
