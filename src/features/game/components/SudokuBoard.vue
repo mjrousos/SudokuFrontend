@@ -89,8 +89,8 @@ function onKeyDown(e: KeyboardEvent): void {
   }
 }
 
-// Focus the selected cell whenever the selection changes so keyboard users
-// can immediately navigate with arrow keys.
+// Focus the selected cell whenever the selection changes, and on initial
+// mount/remount, so keyboard users can immediately navigate with arrow keys.
 watch(
   () => props.selected,
   (sel) => {

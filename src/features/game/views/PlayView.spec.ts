@@ -105,6 +105,8 @@ describe('PlayView pause/resume', () => {
     expect(wrapper.get('[data-testid="paused-banner"]').text()).toBe(
       'Board hidden. Resume to continue.',
     );
+
+    wrapper.unmount();
   });
 
   it('restores the board and number pad when resumed', async () => {
