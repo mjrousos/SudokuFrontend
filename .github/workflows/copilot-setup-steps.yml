@@ -27,3 +27,9 @@ jobs:
         run: |
           go install github.com/github/github-mcp-server/cmd/github-mcp-server@sammorrowdrums-github-app-s2s-auth
           github-mcp-server stdio --help
+
+      - name: Install GitHub MCP Router
+        run: |
+          go install github.com/mjrousos/GitHubMcpRouter/cmd/mcp-router@latest
+          mcp-router --help
+          
