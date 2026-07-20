@@ -32,4 +32,6 @@ jobs:
         run: |
           go install github.com/mjrousos/GitHubMcpRouter/cmd/mcp-router@latest
           mcp-router --help
-          
+
+      - name: Start GitHub MCP Router
+        run: nohup mcp-router http > /tmp/mcp-router.log 2>&1 &
