@@ -35,4 +35,7 @@ jobs:
 
       - name: Start GitHub MCP Router
         run: |
+          GITHUB_APP_ID="${{ secrets.MCP_ROUTER_APP_ID }}"
+          GITHUB_APP_PRIVATE_KEY="${{ secrets.MCP_ROUTER_APP_PRIVATE_KEY }}"
+          export GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY
           nohup mcp-router http > /tmp/mcp-router.log 2>&1 &
