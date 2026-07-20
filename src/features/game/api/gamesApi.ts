@@ -33,7 +33,6 @@ export const gamesApi = {
       difficulty: encodeDifficulty(req.difficulty),
     };
     const raw = await getHttpClient().post<unknown, CreateGameWireRequest>(base, wire, {
-      anonymous: true,
       signal,
     });
     return decodeGameResponse(raw);
@@ -47,7 +46,7 @@ export const gamesApi = {
   },
 
   get: async (gameId: string, signal?: AbortSignal): Promise<GameResponse> => {
-    const raw = await getHttpClient().get<unknown>(`${base}/${gameId}`, { anonymous: true, signal });
+    const raw = await getHttpClient().get<unknown>(`${base}/${gameId}`, { signal });
     return decodeGameResponse(raw);
   },
 
@@ -62,7 +61,7 @@ export const gamesApi = {
     const raw = await getHttpClient().post<unknown, GameMoveRequest>(
       `${base}/${gameId}/moves`,
       req,
-      { anonymous: true, signal },
+      { signal },
     );
     return decodeMoveResponse(raw);
   },
@@ -75,14 +74,14 @@ export const gamesApi = {
     const raw = await getHttpClient().post<unknown, SubmitSolutionRequest>(
       `${base}/${gameId}/solution`,
       req,
-      { anonymous: true, signal },
+      { signal },
     );
     return decodeSubmitSolutionResponse(raw);
   },
 
   hint: (gameId: string, signal?: AbortSignal) =>
-    getHttpClient().post<HintResponse>(`${base}/${gameId}/hint`, undefined, { anonymous: true, signal }),
+    getHttpClient().post<HintResponse>(`${base}/${gameId}/hint`, undefined, { signal }),
 
   abandon: (gameId: string, signal?: AbortSignal) =>
-    getHttpClient().post<void>(`${base}/${gameId}/abandon`, undefined, { anonymous: true, signal }),
+    getHttpClient().post<void>(`${base}/${gameId}/abandon`, undefined, { signal }),
 };
