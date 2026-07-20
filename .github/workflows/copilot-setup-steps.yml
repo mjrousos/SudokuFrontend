@@ -35,17 +35,4 @@ jobs:
 
       - name: Start GitHub MCP Router
         run: |
-          printf 'COPILOT_MCP_GITHUB_APP_ID=%s\n' $COPILOT_MCP_GITHUB_APP_ID
-          printf 'GITHUB_APP_ID=%s\n' "$GITHUB_APP_ID"
-          printf 'MCP_ROUTER_APP_ID=%s\n' "$MCP_ROUTER_APP_ID"
-
-          GITHUB_APP_ID="$MCP_ROUTER_APP_ID"
-          GITHUB_APP_PRIVATE_KEY="$MCP_ROUTER_APP_PRIVATE_KEY"
-          export GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY
-
-          if [[ -z "$GITHUB_APP_ID" || -z "$GITHUB_APP_PRIVATE_KEY" ]]; then
-            echo "::notice::Skipping GitHub MCP Router startup because Copilot cloud agent credentials are unavailable."
-            exit 0
-          fi
-
           nohup mcp-router http > /tmp/mcp-router.log 2>&1 &
