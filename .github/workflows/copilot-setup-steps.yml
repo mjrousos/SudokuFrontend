@@ -35,9 +35,8 @@ jobs:
 
       - name: Start GitHub MCP Router
         run: |
-          # Copilot rewrites these references to shell-quoted literals before Bash runs.
-          GITHUB_APP_ID=$COPILOT_MCP_GITHUB_APP_ID
-          GITHUB_APP_PRIVATE_KEY=$COPILOT_MCP_GITHUB_APP_PRIVATE_KEY
+          GITHUB_APP_ID="$MCP_ROUTER_APP_ID"
+          GITHUB_APP_PRIVATE_KEY="$MCP_ROUTER_APP_PRIVATE_KEY"
           export GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY
 
           if [[ -z "$GITHUB_APP_ID" || -z "$GITHUB_APP_PRIVATE_KEY" ]]; then
