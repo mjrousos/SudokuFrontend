@@ -249,14 +249,25 @@ export function renderHtml() {
     label.textContent = on ? "Refreshing…" : "Refresh";
   }
 
+  async function fetchState(url, opts) {
+    const r = await fetch(url, opts);
+    if (!r.ok) {
+      let body = "";
+      try { body = (await r.text()).slice(0, 300); } catch (e) { /* ignore */ }
+      throw new Error("HTTP " + r.status + " " + r.statusText + (body ? ": " + body : ""));
+    }
+    return r.json();
+  }
+
+  function errMessage(e) { return e && e.message ? e.message : String(e); }
+
   async function doRefresh() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/refresh", { method: "POST" });
-      render(await r.json());
+      render(await fetchState("/api/refresh", { method: "POST" }));
     } catch (e) {
-      render({ error: String(e), prs: [], columns: [] });
+      render({ error: errMessage(e), prs: [], columns: [] });
     } finally {
       setBusy(false);
     }
@@ -264,10 +275,9 @@ export function renderHtml() {
 
   async function loadInitial() {
     try {
-      const r = await fetch("/api/state");
-      render(await r.json());
+      render(await fetchState("/api/state"));
     } catch (e) {
-      render({ error: String(e), prs: [], columns: [] });
+      render({ error: errMessage(e), prs: [], columns: [] });
     }
   }
 

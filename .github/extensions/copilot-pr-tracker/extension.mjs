@@ -58,6 +58,19 @@ async function ensureRepo() {
 
 const withColumns = (snap) => ({ ...snap, columns: COLUMNS });
 
+// Validate an optional "owner/name" repo override consistently everywhere it
+// can enter (canvas open input and the refresh action input). Returns the
+// trimmed value, null when absent, or throws CanvasError on a malformed value.
+const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
+function normalizeRepo(repo) {
+    if (repo == null || repo === "") return null;
+    const value = String(repo).trim();
+    if (!REPO_RE.test(value)) {
+        throw new CanvasError("invalid_repo", 'repo must be in "owner/name" format.');
+    }
+    return value;
+}
+
 function broadcast(snap) {
     const payload = `data: ${JSON.stringify(withColumns(snap))}\n\n`;
     for (const res of [...sseClients]) {
@@ -102,8 +115,10 @@ function sendJson(res, obj) {
 }
 
 async function handleRequest(req, res) {
-    const url = new URL(req.url, "http://127.0.0.1");
     try {
+        // req.url is typed `string | undefined`; default it and parse inside the
+        // try so a malformed URL yields a 500 rather than crashing the request.
+        const url = new URL(req.url ?? "/", "http://127.0.0.1");
         if (req.method === "GET" && url.pathname === "/") {
             res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
             res.end(renderHtml());
@@ -178,6 +193,7 @@ await joinSession({
                 properties: {
                     repo: {
                         type: "string",
+                        pattern: "^[^/\\s]+/[^/\\s]+$",
                         description: 'Optional "owner/name" override. Defaults to the current repository.',
                     },
                 },
@@ -191,21 +207,22 @@ await joinSession({
                     inputSchema: {
                         type: "object",
                         properties: {
-                            repo: { type: "string", description: 'Optional "owner/name" override.' },
+                            repo: {
+                                type: "string",
+                                pattern: "^[^/\\s]+/[^/\\s]+$",
+                                description: 'Optional "owner/name" override.',
+                            },
                         },
                         additionalProperties: false,
                     },
                     handler: async (ctx) => {
-                        const repo = ctx.input?.repo;
-                        if (repo && !repo.includes("/")) {
-                            throw new CanvasError("invalid_repo", 'repo must be "owner/name".');
-                        }
-                        return summarize(await refresh(repo));
+                        return summarize(await refresh(normalizeRepo(ctx.input?.repo) ?? undefined));
                     },
                 },
             ],
             open: async (ctx) => {
-                if (ctx.input?.repo) activeRepo = ctx.input.repo;
+                const repoInput = normalizeRepo(ctx.input?.repo);
+                if (repoInput) activeRepo = repoInput;
                 let entry = servers.get(ctx.instanceId);
                 if (!entry) {
                     entry = await startServer();
