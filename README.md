@@ -186,7 +186,7 @@ scenarios per PR:
 | Scenario | When | What it does |
 | --- | --- | --- |
 | **Mark ready** | PR is a **draft** whose title no longer contains `[WIP]` | Marks it ready for review (`gh pr ready`) |
-| **Request review** | PR is **non-draft** with new commits since the last Copilot review (and Copilot isn't already a requested reviewer) | Requests the Copilot reviewer for the current head |
+| **Request review** | PR is **non-draft** with new commits since the last Copilot review (and no current re-review is in flight) | Requests the Copilot reviewer for the current head; replaces a stale duplicate request left behind by a completed review |
 | **Address review** | The latest Copilot review is for the current head and has **unresolved review threads** | Comments mentioning `@copilot` to address the feedback |
 | **Hand off to human** | The latest Copilot review is for the current head and is **clean** (no unresolved threads) | Adds the **`needs-human-review`** label and a short comment noting Copilot is done and a human should do the final review |
 
