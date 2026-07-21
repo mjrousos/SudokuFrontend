@@ -284,7 +284,16 @@ export function renderHtml() {
   // Live updates pushed by the extension (e.g. when the agent invokes refresh).
   try {
     const es = new EventSource("/events");
-    es.onmessage = (ev) => { if (!busy) render(JSON.parse(ev.data)); };
+    es.onmessage = (ev) => {
+      if (busy) return;
+      // Guard the parse/render so one malformed or non-JSON event (e.g. a
+      // keepalive) can't throw and kill subsequent live updates.
+      try {
+        render(JSON.parse(ev.data));
+      } catch (err) {
+        /* ignore a bad event and keep the stream alive */
+      }
+    };
   } catch (e) { /* SSE optional */ }
 
   loadInitial();

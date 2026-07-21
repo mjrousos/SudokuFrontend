@@ -104,13 +104,13 @@ async function listCopilotPRs(repo, cwd) {
         }));
 }
 
-/** Latest Copilot-reviewer review for a PR, plus whether any exists. */
-async function getCopilotReviewState(repo, number, cwd) {
+/** The most recent Copilot-reviewer review for a PR, or null if none exists. */
+async function getLatestCopilotReview(repo, number, cwd) {
     const [owner, name] = repo.split("/");
     const reviews = await ghApiList(`repos/${owner}/${name}/pulls/${number}/reviews`, cwd);
     const copilotReviews = reviews.filter((r) => COPILOT_REVIEWER_RE.test(r.user?.login ?? ""));
     copilotReviews.sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
-    return { hasCopilotReview: copilotReviews.length > 0, latest: copilotReviews.at(-1) ?? null };
+    return copilotReviews.at(-1) ?? null;
 }
 
 /** PR detail beyond the list view: current head SHA + requested reviewers. */
@@ -245,12 +245,11 @@ export async function gatherState(repo, cwd) {
             !pr.labels.includes(LABEL_NEEDS_HUMAN) &&
             !pr.labels.includes(LABEL_EXHAUSTED);
         if (needsReviewLookup) {
-            const [detail, reviewState] = await Promise.all([
+            const [detail, latest] = await Promise.all([
                 getPrDetail(repo, pr.number, cwd),
-                getCopilotReviewState(repo, pr.number, cwd),
+                getLatestCopilotReview(repo, pr.number, cwd),
             ]);
             const headSha = detail.headSha || pr.headRefOid;
-            const latest = reviewState.latest;
             const copilotRequested = detail.requestedReviewers.some((l) => COPILOT_REQUESTED_RE.test(l));
             let unresolvedCount = 0;
             if (latest && latest.commit_id === headSha) {
