@@ -60,9 +60,18 @@ async function ghGraphql(query, vars, cwd) {
 
 // --- repo resolution --------------------------------------------------------
 
+// A repo identifier is "owner/name": exactly one slash and no whitespace.
+const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
+
 /** Resolve "owner/name" from an explicit override or the working directory. */
 export async function resolveRepo(override, cwd) {
-    if (override && override.includes("/")) return override.trim();
+    if (override != null && override !== "") {
+        const value = String(override).trim();
+        if (!REPO_RE.test(value)) {
+            throw new Error('repo override must be in "owner/name" format.');
+        }
+        return value;
+    }
     const name = (await gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], cwd)).trim();
     if (!name) throw new Error("Could not resolve the current repository (gh repo view).");
     return name;

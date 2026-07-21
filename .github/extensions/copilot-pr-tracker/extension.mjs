@@ -228,9 +228,13 @@ await joinSession({
                     entry = await startServer();
                     servers.set(ctx.instanceId, entry);
                 }
-                // Warm the cache in the background so the first paint is quick;
-                // the iframe also fetches /api/state on load.
-                if (!cache) void refresh().catch(() => {});
+                // Drop a snapshot that belongs to a different repo than the one
+                // now active so /api/state can't serve the previous repo's PRs,
+                // then (re)warm the cache in the background. This covers opening
+                // the canvas with a new `repo` override while a stale snapshot is
+                // still cached. The iframe also fetches /api/state on load.
+                if (cache && activeRepo && cache.repo !== activeRepo) cache = null;
+                if (!cache) void refresh(activeRepo ?? undefined).catch(() => {});
                 return {
                     title: "Copilot PR tracker",
                     status: activeRepo ?? undefined,
