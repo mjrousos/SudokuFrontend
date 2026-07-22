@@ -120,6 +120,33 @@ export function needsReviewRequest({ hasCopilotReview, latestReviewedCommit, hea
   return latestReviewedCommit !== headSha;
 }
 
+/**
+ * Classify GitHub's current Copilot requested-reviewer state.
+ *
+ * Normally a submitted review consumes its pending request. GitHub can instead leave a
+ * duplicate request behind when Copilot was requested twice (for example, automatic review
+ * on ready-for-review racing this reconciler's explicit request). Such a leftover must not
+ * block the next review round forever.
+ *
+ * A pending request is provably stale when its latest request event predates the latest
+ * completed Copilot review. Missing or invalid timestamps are treated conservatively as an
+ * active request so we do not disrupt a real in-flight review.
+ */
+export function classifyCopilotReviewRequest({
+  copilotRequested,
+  latestReviewSubmittedAt,
+  latestRequestCreatedAt,
+}) {
+  if (!copilotRequested) return 'none';
+  if (!latestReviewSubmittedAt || !latestRequestCreatedAt) return 'active';
+
+  const reviewTime = Date.parse(latestReviewSubmittedAt);
+  const requestTime = Date.parse(latestRequestCreatedAt);
+  if (!Number.isFinite(reviewTime) || !Number.isFinite(requestTime)) return 'active';
+
+  return requestTime < reviewTime ? 'stale' : 'active';
+}
+
 /** Build the hidden dedup marker embedded in our address-review comments. */
 export function buildMarker(reviewId, headSha) {
   return `<!-- copilot-reconcile: addressed-review=${reviewId} head=${headSha} -->`;
@@ -170,9 +197,7 @@ export function ownComments(comments, selfLogin) {
 /** True when some prior comment has already addressed the given review id (dedup). */
 export function isAlreadyAddressed(comments, reviewId) {
   const id = String(reviewId);
-  return (comments ?? []).some((c) =>
-    parseMarkers(c.body).some((mk) => mk.reviewId === id),
-  );
+  return (comments ?? []).some((c) => parseMarkers(c.body).some((mk) => mk.reviewId === id));
 }
 
 /**
@@ -246,8 +271,7 @@ function loadConfig() {
   }
   const [owner, name] = repo.split('/');
   const parsedRoundCap = Number.parseInt(process.env.ROUND_CAP ?? '5', 10);
-  const roundCap =
-    Number.isFinite(parsedRoundCap) && parsedRoundCap > 0 ? parsedRoundCap : 5;
+  const roundCap = Number.isFinite(parsedRoundCap) && parsedRoundCap > 0 ? parsedRoundCap : 5;
   return {
     repo,
     owner,
@@ -344,6 +368,33 @@ function getPrDetail(cfg, number) {
   return { headSha: pr?.head?.sha, requestedReviewers: requested };
 }
 
+/** Latest timeline event that requested the Copilot reviewer for this PR. */
+function getLatestCopilotReviewRequest(cfg, number) {
+  const events = ghApiList(`repos/${cfg.owner}/${cfg.name}/issues/${number}/events`);
+  const requests = events
+    .filter((e) => e.event === 'review_requested')
+    .filter((e) => COPILOT_REQUESTED_RE.test(e.requested_reviewer?.login ?? ''))
+    .filter((e) => Boolean(e.created_at))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  return requests.at(-1) ?? null;
+}
+
+/**
+ * Distinguish a real in-flight request from a duplicate request left behind by a completed
+ * review. The REST requested_reviewers list alone cannot make that distinction.
+ */
+function getCopilotReviewRequestState(cfg, number, detail, latestReview) {
+  const copilotRequested = detail.requestedReviewers.some((l) => COPILOT_REQUESTED_RE.test(l));
+  if (!copilotRequested) return 'none';
+
+  const latestRequest = getLatestCopilotReviewRequest(cfg, number);
+  return classifyCopilotReviewRequest({
+    copilotRequested,
+    latestReviewSubmittedAt: latestReview?.submitted_at,
+    latestRequestCreatedAt: latestRequest?.created_at,
+  });
+}
+
 /**
  * From raw `reviewThreads` GraphQL nodes, select the UNRESOLVED threads that were raised by
  * the Copilot reviewer in ONE specific review (identified by its numeric `databaseId`).
@@ -435,6 +486,8 @@ function addressReviewIfRequested(cfg, pr) {
   // Copilot must have reviewed the CURRENT head; otherwise a re-review is pending — wait.
   if (!latest || latest.commit_id !== headSha) return;
 
+  let requestState = getCopilotReviewRequestState(cfg, pr.number, detail, latest);
+
   // Only threads raised by THIS latest review count. Stale unresolved threads from earlier
   // rounds (which the coding agent often can't resolve) must not make a clean re-review look
   // actionable — see selectReviewerThreadsForReview.
@@ -451,7 +504,23 @@ function addressReviewIfRequested(cfg, pr) {
   // CLEAN review → Copilot left no actionable feedback on the current head, so it is done
   // iterating. Flag the PR for a human's final review (once).
   if (!actionable) {
-    flagForHumanReviewIfDone(cfg, pr, detail, latest.id, comments);
+    if (requestState === 'stale') {
+      if (cfg.dryRun) {
+        record(`[dry-run] PR #${pr.number}: remove stale Copilot review request`);
+        requestState = 'none';
+      } else {
+        record(`PR #${pr.number}: removing stale Copilot review request`);
+        if (!removeCopilotReviewer(cfg, pr.number)) {
+          record(
+            `PR #${pr.number}: WARNING — could not remove the stale Copilot review request; ` +
+              `human handoff deferred.`,
+          );
+          return;
+        }
+        requestState = 'none';
+      }
+    }
+    flagForHumanReviewIfDone(cfg, pr, latest.id, comments, requestState === 'active');
     return;
   }
 
@@ -528,10 +597,10 @@ function humanReviewMarker(reviewId) {
  * it's clear a human should perform the final review. Idempotent — see
  * shouldFlagForHumanReview (skips drafts, in-flight re-reviews, and already-flagged PRs).
  */
-function flagForHumanReviewIfDone(cfg, pr, detail, reviewId, comments) {
+function flagForHumanReviewIfDone(cfg, pr, reviewId, comments, copilotRequested) {
   const flag = shouldFlagForHumanReview({
     isReady: !pr.isDraft,
-    copilotRequested: detail.requestedReviewers.some((l) => COPILOT_REQUESTED_RE.test(l)),
+    copilotRequested,
     hasNeedsHumanLabel: hasLabel(pr, LABEL_NEEDS_HUMAN),
     alreadyFlaggedForReview: comments.some((c) =>
       (c.body ?? '').includes(humanReviewMarker(reviewId)),
@@ -573,20 +642,63 @@ function requestReviewIfNeeded(cfg, pr) {
   });
   if (!needs) return;
 
-  // Already-reviewing guard: skip if Copilot is already a pending requested reviewer.
-  if (detail.requestedReviewers.some((l) => COPILOT_REQUESTED_RE.test(l))) return;
+  const requestState = getCopilotReviewRequestState(cfg, pr.number, detail, latest);
+  // Already-reviewing guard: preserve a request made after the latest completed review.
+  if (requestState === 'active') return;
 
   if (cfg.dryRun) {
-    record(`[dry-run] PR #${pr.number}: request Copilot reviewer for ${short(headSha)}`);
+    const action =
+      requestState === 'stale'
+        ? 'replace stale Copilot review request'
+        : 'request Copilot reviewer';
+    record(`[dry-run] PR #${pr.number}: ${action} for ${short(headSha)}`);
     return;
   }
 
-  record(`PR #${pr.number}: requesting Copilot reviewer for ${short(headSha)}`);
+  if (requestState === 'stale') {
+    record(`PR #${pr.number}: replacing stale Copilot review request for ${short(headSha)}`);
+    if (!removeCopilotReviewer(cfg, pr.number)) {
+      record(
+        `PR #${pr.number}: WARNING — could not remove the stale Copilot review request; ` +
+          `manual follow-up needed.`,
+      );
+      return;
+    }
+  } else {
+    record(`PR #${pr.number}: requesting Copilot reviewer for ${short(headSha)}`);
+  }
+
   const ok = requestCopilotReviewer(cfg, pr.number);
   if (!ok) {
     record(
       `PR #${pr.number}: WARNING — could not add the Copilot reviewer; manual follow-up needed.`,
     );
+  }
+}
+
+/**
+ * Remove every pending Copilot review request before replacing a stale duplicate.
+ * Returns true iff Copilot is no longer reported as a requested reviewer.
+ */
+function removeCopilotReviewer(cfg, number) {
+  try {
+    gh([
+      'api',
+      '--method',
+      'DELETE',
+      `repos/${cfg.owner}/${cfg.name}/pulls/${number}/requested_reviewers`,
+      '-f',
+      `reviewers[]=${COPILOT_REVIEWER_LOGIN}`,
+    ]);
+  } catch (err) {
+    record(`PR #${number}: REST reviewer removal errored (${errMsg(err)})`);
+  }
+
+  try {
+    return !isCopilotRequested(cfg, number);
+  } catch (err) {
+    record(`PR #${number}: failed to confirm requested reviewers (${errMsg(err)})`);
+    return false;
   }
 }
 
@@ -661,7 +773,9 @@ function main() {
   );
 
   const prs = listCopilotPRs(cfg);
-  record(`Found ${prs.length} open Copilot-authored PR(s): ${prs.map((p) => '#' + p.number).join(', ') || '(none)'}`);
+  record(
+    `Found ${prs.length} open Copilot-authored PR(s): ${prs.map((p) => '#' + p.number).join(', ') || '(none)'}`,
+  );
 
   for (const pr of prs) {
     // Loop-exhausted PRs are left entirely to a human until the label is removed.

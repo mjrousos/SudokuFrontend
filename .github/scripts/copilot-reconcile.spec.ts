@@ -3,6 +3,7 @@ import {
   COPILOT_REVIEWER_LOGIN,
   isMarkReadyEligible,
   needsReviewRequest,
+  classifyCopilotReviewRequest,
   classifyActionableReview,
   selectReviewerThreadsForReview,
   shouldFlagForHumanReview,
@@ -43,7 +44,11 @@ describe('isMarkReadyEligible (scenario 1)', () => {
 describe('needsReviewRequest (scenario 3)', () => {
   it('needs a review when no Copilot review exists yet', () => {
     expect(
-      needsReviewRequest({ hasCopilotReview: false, latestReviewedCommit: undefined, headSha: 'abc' }),
+      needsReviewRequest({
+        hasCopilotReview: false,
+        latestReviewedCommit: undefined,
+        headSha: 'abc',
+      }),
     ).toBe(true);
   });
 
@@ -57,6 +62,68 @@ describe('needsReviewRequest (scenario 3)', () => {
     expect(
       needsReviewRequest({ hasCopilotReview: true, latestReviewedCommit: 'head', headSha: 'head' }),
     ).toBe(false);
+  });
+});
+
+describe('classifyCopilotReviewRequest (stale duplicate guard)', () => {
+  it('reports none when Copilot is not currently requested', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: false,
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+        latestRequestCreatedAt: '2026-07-20T20:43:44Z',
+      }),
+    ).toBe('none');
+  });
+
+  it('detects a request left behind by a later completed review (the PR #44 bug)', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: true,
+        latestRequestCreatedAt: '2026-07-20T20:43:44Z',
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+      }),
+    ).toBe('stale');
+  });
+
+  it('preserves a re-review request created after the latest completed review', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: true,
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+        latestRequestCreatedAt: '2026-07-20T21:00:00Z',
+      }),
+    ).toBe('active');
+  });
+
+  it('preserves a same-second request because GitHub timestamps are second-granular', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: true,
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+        latestRequestCreatedAt: '2026-07-20T20:48:44Z',
+      }),
+    ).toBe('active');
+  });
+
+  it('conservatively preserves a pending request when timestamps are unavailable', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: true,
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+        latestRequestCreatedAt: undefined,
+      }),
+    ).toBe('active');
+  });
+
+  it('conservatively preserves a pending request when timestamps are invalid', () => {
+    expect(
+      classifyCopilotReviewRequest({
+        copilotRequested: true,
+        latestReviewSubmittedAt: '2026-07-20T20:48:44Z',
+        latestRequestCreatedAt: 'not-a-date',
+      }),
+    ).toBe('active');
   });
 });
 
@@ -102,7 +169,10 @@ describe('classifyActionableReview (scenario 2)', () => {
 
 describe('selectReviewerThreadsForReview (stale-feedback scoping)', () => {
   // Build a reviewThreads node like the GraphQL response.
-  const node = (reviewId, { resolved = false, login = 'copilot-pull-request-reviewer', path = 'f.ts', line = 1 } = {}) => ({
+  const node = (
+    reviewId,
+    { resolved = false, login = 'copilot-pull-request-reviewer', path = 'f.ts', line = 1 } = {},
+  ) => ({
     isResolved: resolved,
     path,
     line,

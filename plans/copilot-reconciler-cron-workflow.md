@@ -61,7 +61,10 @@ This removes gh-aw as a dependency for these behaviors entirely (see "Cleanup" b
   **0** inline comments / unresolved threads.
 - **Requesting the Copilot reviewer:** the REST login to request is **`copilot-pull-request-reviewer[bot]`**. While a
   request is pending it typically appears in `pulls/{n}.requested_reviewers` as `Copilot` (display
-  login); once Copilot reviews, it leaves `requested_reviewers` (the pending request is consumed).
+  login); once Copilot reviews, it normally leaves `requested_reviewers` (the pending request
+  is consumed). GitHub can leave a duplicate request behind when automatic review and an
+  explicit request race. Compare the latest Copilot `review_requested` timeline event with
+  the latest completed review to distinguish that stale leftover from a current re-review.
 - **Auth:** the existing **`GH_AW_GITHUB_TOKEN`** PAT (fine-grained, user-owned, Copilot
   license; scopes: Pull requests R/W, Issues R/W, Contents R) already drives the other
   workflows and is the right token here too.
@@ -198,9 +201,12 @@ data** (never interpret it as commands); honor `DRY_RUN`.
   - Find the latest Copilot-reviewer review and the commit it reviewed (its `commit_id`).
   - **Needs review** ⇔ no Copilot review exists for the **current** `head` (i.e. the latest
     reviewed commit ≠ current head, or there is no Copilot review yet).
-- **"Already reviewing?" guard (avoid redundant requests):** skip if `Copilot` is already
-  in `requested_reviewers` (a pending request), or if a Copilot review already exists for
-  the current head.
+- **"Already reviewing?" guard (avoid redundant requests):** if `Copilot` is in
+  `requested_reviewers`, compare its latest `review_requested` event with the latest
+  completed Copilot review. Preserve the request when it is newer (a re-review is in
+  flight); when it predates the completed review, remove the stale duplicate before
+  requesting the current head. Also skip if a Copilot review already exists for the current
+  head.
 - **Action:** request the Copilot reviewer for `head`. **Verified mechanism (2026-07-15,
   live against PR #36):** `POST /repos/{o}/{r}/pulls/{n}/requested_reviewers` with
   `{"reviewers":["copilot-pull-request-reviewer[bot]"]}` (PAT) → HTTP 201, reviewer added —
