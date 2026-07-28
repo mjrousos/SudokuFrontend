@@ -57,7 +57,14 @@ if (args.help) {
 
 const repoOverride = args.repo ?? process.env.PR_TRACKER_REPO ?? null;
 const cwd = resolveRepoDir();
-const port = Number(args.port ?? process.env.PORT ?? 8123);
+
+const portRaw = args.port ?? process.env.PORT ?? "8123";
+const port = Number(portRaw);
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    process.stderr.write(`Invalid --port/PORT value: ${portRaw}\n`);
+    process.exit(1);
+}
+
 const host = args.host ?? process.env.HOST ?? "127.0.0.1";
 
 const tracker = createTracker({
