@@ -313,7 +313,7 @@ For anyone **without** the Copilot App, the same board is published as a static 
 The workflow runs the generator (`build-site.mjs`) on a schedule (twice hourly), on
 pushes to `main` that touch the tracker, and on demand (**Actions → Copilot PR tracker
 site → Run workflow**). It writes `index.html` + `state.json` and deploys them with the
-built-in read-only `GITHUB_TOKEN` — **no PAT required** (unlike the reconciler, it only
+built-in `GITHUB_TOKEN` (scoped to read-only repo/PR permissions) — **no PAT required** (unlike the reconciler, it only
 reads). The page re-fetches its snapshot every few minutes.
 
 > **First-time activation:** the schedule and Pages deploy only take effect once this
