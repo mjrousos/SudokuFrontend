@@ -1,0 +1,82 @@
+# Copilot PR tracker site — build the standalone dashboard as a static site and
+# publish it to GitHub Pages so anyone can see the state of open Copilot-authored
+# PRs without the Copilot App installed.
+#
+# The generator (.github/extensions/copilot-pr-tracker/build-site.mjs) reuses the
+# exact same state derivation and renderer as the canvas, so the published board
+# stays identical to the live one. It is READ-ONLY: it only fetches public PR
+# metadata, reviews, and review threads, so the built-in GITHUB_TOKEN is enough —
+# no PAT required (unlike the reconciler, which needs a user token to write).
+name: Copilot PR tracker site
+
+on:
+  # Keep the published snapshot reasonably fresh. Cron is best-effort; this
+  # off-the-hour, twice-hourly cadence is delivered more reliably than :00.
+  schedule:
+    - cron: "12,42 * * * *"
+  # Rebuild immediately when the tracker itself changes on the default branch.
+  push:
+    branches: [main]
+    paths:
+      - ".github/extensions/copilot-pr-tracker/**"
+      - ".github/workflows/pr-tracker-pages.yml"
+  # Allow manual publishes from the Actions tab.
+  workflow_dispatch:
+
+# Least privilege: read the repo + PRs to gather state; the Pages-specific scopes
+# are required by actions/deploy-pages (OIDC) to publish.
+permissions:
+  contents: read
+  pull-requests: read
+  pages: write
+  id-token: write
+
+# Never let two publishes overlap; a newer run supersedes an in-flight one.
+concurrency:
+  group: pr-tracker-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build tracker site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Configure Pages
+        # enablement:true turns on Pages (source = GitHub Actions) on first run so
+        # the very first deploy doesn't require a manual settings change.
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Generate static site
+        env:
+          # Read-only built-in token; gh reads PRs/reviews/threads with this.
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OUT: ./_site
+        run: node .github/extensions/copilot-pr-tracker/build-site.mjs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

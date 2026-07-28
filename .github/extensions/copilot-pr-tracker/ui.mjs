@@ -2,7 +2,20 @@
 // A single self-contained HTML document: themed CSS + client JS that renders
 // the tracker snapshot as a four-column board and keeps it live via SSE.
 
-export function renderHtml() {
+export function renderHtml(options = {}) {
+    // One renderer serves three consumers by varying only these endpoints:
+    //   - canvas + local server: live /api/state, /api/refresh, SSE /events.
+    //   - static site (GitHub Pages): fetch ./state.json, no SSE, refresh re-GETs.
+    const config = {
+        stateUrl: options.stateUrl ?? "/api/state",
+        refreshUrl: "refreshUrl" in options ? options.refreshUrl : "/api/refresh",
+        eventsUrl: "eventsUrl" in options ? options.eventsUrl : "/events",
+        pollMs: options.pollMs ?? 45000,
+        cacheBust: options.cacheBust ?? false,
+        subtitle: options.subtitle ?? "",
+    };
+    // Escape "<" so a config value can't break out of the <script> element.
+    const configJson = JSON.stringify(config).replace(/</g, "\\u003c");
     return `<!doctype html>
 <html>
 <head>
@@ -50,6 +63,7 @@ export function renderHtml() {
   }
   .spacer { flex: 1 1 auto; }
   .updated { font-size: 12px; color: var(--text-color-muted, #656d76); }
+  .subtitle { font-size: 12px; color: var(--text-color-muted, #656d76); }
   button.refresh {
     font: inherit; font-size: 13px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px;
@@ -125,6 +139,7 @@ export function renderHtml() {
   <header>
     <h1>Copilot PR tracker</h1>
     <span class="repo" id="repo">…</span>
+    <span class="subtitle" id="subtitle"></span>
     <span class="spacer"></span>
     <span class="updated" id="updated"></span>
     <button class="refresh" id="refresh" onclick="doRefresh()">
@@ -136,6 +151,11 @@ export function renderHtml() {
   <div id="content"><div class="loading-hint">Loading Copilot PRs…</div></div>
 
 <script>
+  const CONFIG = ${configJson};
+  function withBust(url) {
+    if (!CONFIG.cacheBust) return url;
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now();
+  }
   const STATE_ACCENT = {
     "wip": "var(--c-wip)",
     "marking-ready": "var(--c-marking)",
@@ -265,7 +285,10 @@ export function renderHtml() {
     if (busy) return;
     setBusy(true);
     try {
-      render(await fetchState("/api/refresh", { method: "POST" }));
+      const data = CONFIG.refreshUrl
+        ? await fetchState(CONFIG.refreshUrl, { method: "POST" })
+        : await fetchState(withBust(CONFIG.stateUrl));
+      render(data);
     } catch (e) {
       render({ error: errMessage(e), prs: [], columns: [] });
     } finally {
@@ -274,31 +297,36 @@ export function renderHtml() {
   }
 
   async function loadInitial() {
+    const sub = document.getElementById("subtitle");
+    if (sub) sub.textContent = CONFIG.subtitle || "";
     try {
-      render(await fetchState("/api/state"));
+      render(await fetchState(withBust(CONFIG.stateUrl)));
     } catch (e) {
       render({ error: errMessage(e), prs: [], columns: [] });
     }
   }
 
-  // Live updates pushed by the extension (e.g. when the agent invokes refresh).
-  try {
-    const es = new EventSource("/events");
-    es.onmessage = (ev) => {
-      if (busy) return;
-      // Guard the parse/render so one malformed or non-JSON event (e.g. a
-      // keepalive) can't throw and kill subsequent live updates.
-      try {
-        render(JSON.parse(ev.data));
-      } catch (err) {
-        /* ignore a bad event and keep the stream alive */
-      }
-    };
-  } catch (e) { /* SSE optional */ }
+  // Live updates pushed by the server (e.g. when the agent invokes refresh).
+  // Only when an events endpoint is configured — the static site has none.
+  if (CONFIG.eventsUrl) {
+    try {
+      const es = new EventSource(CONFIG.eventsUrl);
+      es.onmessage = (ev) => {
+        if (busy) return;
+        // Guard the parse/render so one malformed or non-JSON event (e.g. a
+        // keepalive) can't throw and kill subsequent live updates.
+        try {
+          render(JSON.parse(ev.data));
+        } catch (err) {
+          /* ignore a bad event and keep the stream alive */
+        }
+      };
+    } catch (e) { /* SSE optional */ }
+  }
 
   loadInitial();
-  // Gentle auto-refresh while the panel is visible.
-  setInterval(() => { if (document.visibilityState === "visible") doRefresh(); }, 45000);
+  // Gentle auto-refresh while the panel/tab is visible.
+  setInterval(() => { if (document.visibilityState === "visible") doRefresh(); }, CONFIG.pollMs);
 </script>
 </body>
 </html>`;

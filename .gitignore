@@ -3,6 +3,10 @@ dist/
 dist-ssr/
 *.local
 
+# Copilot PR tracker — local static-site generator output
+pr-tracker-site/
+_site/
+
 # Dependencies
 node_modules/
 

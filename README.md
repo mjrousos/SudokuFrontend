@@ -275,3 +275,64 @@ The reconciler is a plain, hand-maintained workflow + script (no code generation
 [GitHub Agentic Workflows](https://github.github.com/gh-aw/), but no agentic workflows
 currently exist; see `plans/copilot-reconciler-cron-workflow.md` for the design and
 `plans/copilot-pr-automation-agentic-workflows.md` for the superseded agentic approach.
+
+## Copilot PR tracker
+
+A companion **dashboard** visualizes where every open, Copilot-authored PR sits in
+the reconciler's loop. It reads the same signals the reconciler acts on (draft/`[WIP]`
+state, requested reviewers, the latest Copilot review, unresolved review threads, and
+the `needs-human-review` / `copilot-loop-exhausted` labels) and lays the PRs out on a
+board with four columns:
+
+| Column | Meaning |
+| --- | --- |
+| **Work in progress** | Draft PR still carrying `[WIP]` — Copilot is still working |
+| **In Copilot review** | Handed to the Copilot reviewer; awaiting or processing a review |
+| **Addressing feedback** | Has unresolved review threads Copilot is working through |
+| **Ready for human review** | Review came back clean (or the loop was exhausted) — your turn |
+
+It is **read-only** — it never writes to PRs, so it needs only read access and never
+touches the reconciler's PAT. All the state derivation lives in one place
+(`.github/extensions/copilot-pr-tracker/gh.mjs`) and the board renderer in `ui.mjs`,
+and the three surfaces below all reuse them so they can't drift apart.
+
+### 1. Canvas (GitHub Copilot App)
+
+`.github/extensions/copilot-pr-tracker/` is a Copilot CLI **canvas extension**. Open the
+**Copilot PR tracker** canvas in the app to get the live board in a side panel, with a
+Refresh button and live updates over Server-Sent Events. Nothing to install beyond the
+app — it auto-detects this repo.
+
+### 2. Website (GitHub Pages)
+
+For anyone **without** the Copilot App, the same board is published as a static site by
+`.github/workflows/pr-tracker-pages.yml`:
+
+**<https://mjrousos.github.io/SudokuFrontend/>**
+
+The workflow runs the generator (`build-site.mjs`) on a schedule (twice hourly), on
+pushes to `main` that touch the tracker, and on demand (**Actions → Copilot PR tracker
+site → Run workflow**). It writes `index.html` + `state.json` and deploys them with the
+built-in read-only `GITHUB_TOKEN` — **no PAT required** (unlike the reconciler, it only
+reads). The page re-fetches its snapshot every few minutes.
+
+> **First-time activation:** the schedule and Pages deploy only take effect once this
+> workflow is on the **default branch** (`main`) — GitHub runs `schedule` triggers only
+> from the default branch. The workflow enables Pages itself (`configure-pages` with
+> `enablement: true`); if your org disables that, set **Settings → Pages → Source =
+> GitHub Actions** once.
+
+### 3. Standalone local server
+
+To run the live board yourself without the app, start the bundled server (needs Node and
+an authenticated [`gh`](https://cli.github.com/) — or a `GH_TOKEN` env var):
+
+```bash
+node .github/extensions/copilot-pr-tracker/server.mjs
+# then open http://127.0.0.1:8123/
+```
+
+Flags: `--repo owner/name` (default: auto-detect from the repo), `--port` (default
+`8123`, or `PORT`), `--host` (default `127.0.0.1`, or `HOST`). It serves the same live
+`/api/state`, `/api/refresh`, and SSE `/events` endpoints the canvas uses.
+
