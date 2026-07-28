@@ -1,0 +1,84 @@
+# Copilot PR tracker — GitHub Pages
+#
+# Builds a static snapshot of open Copilot-authored PRs and deploys it to
+# GitHub Pages at https://mjrousos.github.io/SudokuFrontend/.
+#
+# Triggers:
+#   • Schedule  — hourly, so the published board stays roughly up-to-date.
+#   • Push      — whenever tracker files change on main, so the site is
+#                 refreshed immediately after a code update.
+#   • Dispatch  — manual run from the Actions tab.
+#
+# Token:  uses the built-in read-only GITHUB_TOKEN; no PAT required.
+#         The generator only reads public PR/review metadata.
+#
+# First-run activation note:
+#   GitHub only runs `schedule` triggers from the default branch (main).
+#   This workflow enables Pages itself via `configure-pages` (enablement: true).
+#   If an org policy blocks automatic Pages enablement, go to
+#   Settings → Pages → Source and set it to "GitHub Actions" once.
+
+name: Copilot PR tracker — GitHub Pages
+
+on:
+  schedule:
+    # Hourly, off the top of the hour (fewer runner contention issues).
+    - cron: "17 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/extensions/copilot-pr-tracker/**"
+      - ".github/workflows/pr-tracker-pages.yml"
+  workflow_dispatch:
+
+# Allow only one Pages deploy at a time; don't cancel in-progress deploys.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+# Minimal permissions: read repo contents + write to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build static site
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Generate static site
+        run: node .github/extensions/copilot-pr-tracker/build-site.mjs
+        env:
+          PR_TRACKER_REPO: ${{ github.repository }}
+          PR_TRACKER_OUT: pr-tracker-site
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pr-tracker-site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

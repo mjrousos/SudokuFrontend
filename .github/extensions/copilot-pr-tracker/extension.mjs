@@ -3,23 +3,21 @@
 // repo's reconciler (.github/scripts/copilot-reconcile.mjs) moves them through:
 // work-in-progress -> Copilot review -> addressing feedback -> ready for a human.
 //
-// Wiring only. State derivation lives in gh.mjs; the iframe renderer in ui.mjs.
+// Wiring only. State derivation lives in gh.mjs; the iframe renderer in ui.mjs;
+// the shared HTTP core (cache, refresh, SSE, routing) in server-core.mjs.
 
-import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { joinSession, createCanvas, CanvasError } from "@github/copilot-sdk/extension";
-import { COLUMNS, resolveRepo, gatherState } from "./gh.mjs";
-import { renderHtml } from "./ui.mjs";
-
-// One loopback HTTP server per open canvas instance (each on its own port).
-const servers = new Map(); // instanceId -> { server, url }
-// SSE connections across all instances; snapshots are pushed to every client.
-const sseClients = new Set(); // http.ServerResponse
-// Most recent snapshot (shared: the tracker is repo-scoped, not panel-scoped).
-let cache = null;
-// Dedupe concurrent refreshes into a single in-flight gather.
-let inflight = null;
+import { resolveRepo, COLUMNS } from "./gh.mjs";
+import {
+    configure,
+    getActiveRepo,
+    getCache,
+    evictIfRepoChanged,
+    refresh,
+    startServer,
+} from "./server-core.mjs";
 
 // A project-scoped extension lives at <repoRoot>/.github/extensions/<name>/, so
 // the repo it should track is three levels up. `gh` needs a valid git dir only
@@ -38,25 +36,29 @@ function resolveRepoDir() {
 }
 
 const primaryCwd = resolveRepoDir();
-let activeRepo = null; // resolved "owner/name"
+
+// Initialize the core with the extension's working directory.
+configure({ cwd: primaryCwd });
+
+// One loopback HTTP server per open canvas instance (each on its own port).
+const servers = new Map(); // instanceId -> { server, url }
 
 /** Resolve the repo once, trying the project dir then the process cwd. */
 async function ensureRepo() {
-    if (activeRepo) return activeRepo;
+    if (getActiveRepo()) return getActiveRepo();
     const candidates = [...new Set([primaryCwd, process.cwd()].filter(Boolean))];
     let lastErr;
     for (const dir of candidates) {
         try {
-            activeRepo = await resolveRepo(undefined, dir);
-            return activeRepo;
+            const repo = await resolveRepo(undefined, dir);
+            configure({ repo });
+            return repo;
         } catch (err) {
             lastErr = err;
         }
     }
     throw lastErr ?? new Error("Could not resolve the current repository.");
 }
-
-const withColumns = (snap) => ({ ...snap, columns: COLUMNS });
 
 // Validate an optional "owner/name" repo override consistently everywhere it
 // can enter (canvas open input and the refresh action input). Returns the
@@ -69,95 +71,6 @@ function normalizeRepo(repo) {
         throw new CanvasError("invalid_repo", 'repo must be in "owner/name" format.');
     }
     return value;
-}
-
-function broadcast(snap) {
-    const payload = `data: ${JSON.stringify(withColumns(snap))}\n\n`;
-    for (const res of [...sseClients]) {
-        try {
-            res.write(payload);
-        } catch {
-            sseClients.delete(res);
-        }
-    }
-}
-
-/** Gather a fresh snapshot, update the cache, and push it to open panels. */
-async function refresh(repoOverride) {
-    if (inflight) return inflight;
-    inflight = (async () => {
-        try {
-            if (repoOverride) activeRepo = repoOverride;
-            const repo = activeRepo ?? (await ensureRepo());
-            cache = await gatherState(repo, primaryCwd);
-        } catch (err) {
-            cache = {
-                repo: activeRepo ?? "(unknown)",
-                generatedAt: new Date().toISOString(),
-                error: err?.message ? String(err.message).split("\n")[0] : String(err),
-                prs: [],
-            };
-        }
-        broadcast(cache);
-        return cache;
-    })();
-    try {
-        return await inflight;
-    } finally {
-        inflight = null;
-    }
-}
-
-function sendJson(res, obj) {
-    const body = JSON.stringify(withColumns(obj));
-    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(body);
-}
-
-async function handleRequest(req, res) {
-    try {
-        // req.url is typed `string | undefined`; default it and parse inside the
-        // try so a malformed URL yields a 500 rather than crashing the request.
-        const url = new URL(req.url ?? "/", "http://127.0.0.1");
-        if (req.method === "GET" && url.pathname === "/") {
-            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-            res.end(renderHtml());
-            return;
-        }
-        if (req.method === "GET" && url.pathname === "/api/state") {
-            sendJson(res, cache ?? (await refresh()));
-            return;
-        }
-        if (req.method === "POST" && url.pathname === "/api/refresh") {
-            sendJson(res, await refresh());
-            return;
-        }
-        if (req.method === "GET" && url.pathname === "/events") {
-            res.writeHead(200, {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                Connection: "keep-alive",
-            });
-            res.write(": connected\n\n");
-            sseClients.add(res);
-            if (cache) res.write(`data: ${JSON.stringify(withColumns(cache))}\n\n`);
-            req.on("close", () => sseClients.delete(res));
-            return;
-        }
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end("Not found");
-    } catch (err) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end(String(err?.message ?? err));
-    }
-}
-
-async function startServer() {
-    const server = createServer(handleRequest);
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const address = server.address();
-    const port = typeof address === "object" && address ? address.port : 0;
-    return { server, url: `http://127.0.0.1:${port}/` };
 }
 
 /** Compact, agent-facing summary of the current snapshot. */
@@ -222,10 +135,12 @@ await joinSession({
             ],
             open: async (ctx) => {
                 const repoInput = normalizeRepo(ctx.input?.repo);
-                if (repoInput) activeRepo = repoInput;
+                if (repoInput) configure({ repo: repoInput });
+                // Warm the repo if it hasn't been resolved yet.
+                if (!getActiveRepo()) await ensureRepo().catch(() => {});
                 let entry = servers.get(ctx.instanceId);
                 if (!entry) {
-                    entry = await startServer();
+                    entry = await startServer("127.0.0.1", 0);
                     servers.set(ctx.instanceId, entry);
                 }
                 // Drop a snapshot that belongs to a different repo than the one
@@ -233,11 +148,11 @@ await joinSession({
                 // then (re)warm the cache in the background. This covers opening
                 // the canvas with a new `repo` override while a stale snapshot is
                 // still cached. The iframe also fetches /api/state on load.
-                if (cache && activeRepo && cache.repo !== activeRepo) cache = null;
-                if (!cache) void refresh(activeRepo ?? undefined).catch(() => {});
+                evictIfRepoChanged();
+                if (!getCache()) void refresh().catch(() => {});
                 return {
                     title: "Copilot PR tracker",
-                    status: activeRepo ?? undefined,
+                    status: getActiveRepo() ?? undefined,
                     url: entry.url,
                 };
             },

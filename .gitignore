@@ -37,3 +37,7 @@ pnpm-debug.log*
 # Misc
 *.tsbuildinfo
 .tmp/
+
+# PR tracker static site generator output
+pr-tracker-site/
+_site/

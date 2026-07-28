@@ -1,8 +1,19 @@
 // ui.mjs — the iframe renderer for the copilot-pr-tracker canvas.
 // A single self-contained HTML document: themed CSS + client JS that renders
 // the tracker snapshot as a four-column board and keeps it live via SSE.
+//
+// renderHtml(opts) accepts an optional mode:
+//   opts.mode = "live"   (default) — canvas / local server: SSE + /api/state + /api/refresh
+//   opts.mode = "static"           — GitHub Pages: polls ./state.json, no SSE
 
-export function renderHtml() {
+export function renderHtml(opts = {}) {
+    const mode = opts.mode ?? "live";
+    // CONFIG is injected into the page so client-side JS can adapt behaviour.
+    const config =
+        mode === "static"
+            ? { mode: "static", stateUrl: "./state.json", pollInterval: 300000 }
+            : { mode: "live", stateUrl: "/api/state", refreshUrl: "/api/refresh", eventsUrl: "/events", pollInterval: 45000 };
+    const configJson = JSON.stringify(config);
     return `<!doctype html>
 <html>
 <head>
@@ -235,6 +246,10 @@ export function renderHtml() {
       "</div>";
   }
 
+  // CONFIG is injected by the server at render time.
+  // eslint-disable-next-line no-undef
+  const CONFIG = ${configJson};
+
   let busy = false;
   function setBusy(on) {
     busy = on;
@@ -265,7 +280,12 @@ export function renderHtml() {
     if (busy) return;
     setBusy(true);
     try {
-      render(await fetchState("/api/refresh", { method: "POST" }));
+      // In live mode POST /api/refresh triggers a server-side re-fetch.
+      // In static mode we re-fetch the pre-built state.json snapshot instead.
+      const data = CONFIG.mode === "live"
+        ? await fetchState(CONFIG.refreshUrl, { method: "POST" })
+        : await fetchState(CONFIG.stateUrl);
+      render(data);
     } catch (e) {
       render({ error: errMessage(e), prs: [], columns: [] });
     } finally {
@@ -275,30 +295,32 @@ export function renderHtml() {
 
   async function loadInitial() {
     try {
-      render(await fetchState("/api/state"));
+      render(await fetchState(CONFIG.stateUrl));
     } catch (e) {
       render({ error: errMessage(e), prs: [], columns: [] });
     }
   }
 
-  // Live updates pushed by the extension (e.g. when the agent invokes refresh).
-  try {
-    const es = new EventSource("/events");
-    es.onmessage = (ev) => {
-      if (busy) return;
-      // Guard the parse/render so one malformed or non-JSON event (e.g. a
-      // keepalive) can't throw and kill subsequent live updates.
-      try {
-        render(JSON.parse(ev.data));
-      } catch (err) {
-        /* ignore a bad event and keep the stream alive */
-      }
-    };
-  } catch (e) { /* SSE optional */ }
+  // Live updates pushed by the server via SSE (live mode only).
+  if (CONFIG.mode === "live") {
+    try {
+      const es = new EventSource(CONFIG.eventsUrl);
+      es.onmessage = (ev) => {
+        if (busy) return;
+        // Guard the parse/render so one malformed or non-JSON event (e.g. a
+        // keepalive) can't throw and kill subsequent live updates.
+        try {
+          render(JSON.parse(ev.data));
+        } catch (err) {
+          /* ignore a bad event and keep the stream alive */
+        }
+      };
+    } catch (e) { /* SSE optional */ }
+  }
 
   loadInitial();
-  // Gentle auto-refresh while the panel is visible.
-  setInterval(() => { if (document.visibilityState === "visible") doRefresh(); }, 45000);
+  // Periodic auto-refresh while the panel/page is visible.
+  setInterval(() => { if (document.visibilityState === "visible") doRefresh(); }, CONFIG.pollInterval);
 </script>
 </body>
 </html>`;
