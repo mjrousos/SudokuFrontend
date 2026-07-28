@@ -10,23 +10,28 @@
 //
 // Requirements: an authenticated `gh` CLI on PATH (reads PR data only).
 
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { resolveRepo } from "./gh.mjs";
-import { configure, refresh, startServer } from "./server-core.mjs";
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveRepo } from './gh.mjs';
+import { configure, refresh, startServer } from './server-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 // Parse CLI flags: --name=value
 const args = process.argv.slice(2);
 const flag = (name) => {
-    const a = args.find((a) => a.startsWith(`--${name}=`));
-    return a != null ? a.slice(name.length + 3) : null;
+  const a = args.find((a) => a.startsWith(`--${name}=`));
+  return a != null ? a.slice(name.length + 3) : null;
 };
 
-const repoArg = flag("repo") ?? process.env.PR_TRACKER_REPO ?? null;
-const portArg = parseInt(flag("port") ?? process.env.PORT ?? "3000", 10);
-const hostArg = flag("host") ?? process.env.HOST ?? "127.0.0.1";
+const repoArg = flag('repo') ?? process.env.PR_TRACKER_REPO ?? null;
+const portText = (flag('port') ?? process.env.PORT ?? '3000').trim();
+const portArg = Number(portText);
+const hostArg = flag('host') ?? process.env.HOST ?? '127.0.0.1';
+
+if (!Number.isInteger(portArg) || portArg < 1 || portArg > 65535) {
+  throw new Error(`Invalid port "${portText}". Expected an integer between 1 and 65535.`);
+}
 
 // Resolve the repo (from flag/env, or auto-detect via `gh repo view` in `here`).
 const repo = await resolveRepo(repoArg, here);

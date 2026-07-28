@@ -23,12 +23,12 @@ name: Copilot PR tracker — GitHub Pages
 on:
   schedule:
     # Hourly, off the top of the hour (fewer runner contention issues).
-    - cron: "17 * * * *"
+    - cron: '17 * * * *'
   push:
     branches: [main]
     paths:
-      - ".github/extensions/copilot-pr-tracker/**"
-      - ".github/workflows/pr-tracker-pages.yml"
+      - '.github/extensions/copilot-pr-tracker/**'
+      - '.github/workflows/pr-tracker-pages.yml'
   workflow_dispatch:
 
 # Allow only one Pages deploy at a time; don't cancel in-progress deploys.
@@ -39,6 +39,7 @@ concurrency:
 # Minimal permissions: read repo contents + write to Pages.
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
@@ -53,7 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: '20'
 
       - name: Generate static site
         run: node .github/extensions/copilot-pr-tracker/build-site.mjs
