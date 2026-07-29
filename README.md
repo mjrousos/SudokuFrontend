@@ -336,3 +336,11 @@ Flags: `--repo owner/name` (default: auto-detect from the repo), `--port` (defau
 `8123`, or `PORT`), `--host` (default `127.0.0.1`, or `HOST`). It serves the same live
 `/api/state`, `/api/refresh`, and SSE `/events` endpoints the canvas uses.
 
+### Theme (light / dark)
+
+Inside the Copilot App the canvas follows the app's synced light/dark theme
+automatically. The **website** and **local server** add their own **Auto / Light / Dark**
+toggle in the header — Auto follows your OS preference, and an explicit choice is
+remembered per browser (`localStorage`). The toggle only appears when the board is served
+standalone; it stays hidden in the canvas so the app keeps driving the theme.
+
