@@ -32,6 +32,37 @@ export function renderHtml(options = {}) {
     --c-human: var(--true-color-green, #1a7f37);
     --c-exhausted: var(--true-color-red, #cf222e);
   }
+
+  /* Standalone website palette (served by server.mjs or the static Pages build,
+     i.e. outside the Copilot App). Inside the canvas the host injects a synced
+     light/dark theme, so these rules are scoped under html.standalone — a class
+     the script below adds ONLY when those host tokens are absent — and never
+     affect the embedded canvas. */
+  html.standalone {
+    color-scheme: light;
+    --background-color-default: #ffffff;
+    --surface: #ffffff;
+    --text-color-default: #1f2328;
+    --text-color-muted: #656d76;
+    --border-color-default: #d0d7de;
+  }
+  html.standalone.dark {
+    color-scheme: dark;
+    --background-color-default: #0d1117;
+    --surface: #161b22;
+    --text-color-default: #e6edf3;
+    --text-color-muted: #8b949e;
+    --border-color-default: #30363d;
+    /* Accents brightened for legibility on a dark background. These flow into
+       the --c-* tokens above via var() substitution. */
+    --true-color-gray: #8b949e;
+    --true-color-purple: #d2a8ff;
+    --true-color-blue: #4493f8;
+    --true-color-orange: #ec8e2c;
+    --true-color-teal: #39c5cf;
+    --true-color-green: #3fb950;
+    --true-color-red: #f85149;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -46,7 +77,7 @@ export function renderHtml(options = {}) {
     padding: 14px 18px;
     border-bottom: 1px solid var(--border-color-default, #d0d7de);
     position: sticky; top: 0; z-index: 5;
-    background: var(--background-color-default, #ffffff);
+    background: var(--surface, var(--background-color-default, #ffffff));
   }
   h1 {
     margin: 0;
@@ -67,13 +98,23 @@ export function renderHtml(options = {}) {
   button.refresh {
     font: inherit; font-size: 13px; cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px;
-    background: var(--background-color-default, #ffffff);
+    background: var(--surface, var(--background-color-default, #ffffff));
     color: var(--text-color-default, #1f2328);
     border: 1px solid var(--border-color-default, #d0d7de);
     border-radius: 6px; padding: 5px 12px;
   }
   button.refresh:hover { border-color: var(--c-review); color: var(--c-review); }
   button.refresh:disabled { opacity: .55; cursor: default; }
+  button.theme-toggle {
+    font: inherit; font-size: 13px; cursor: pointer;
+    display: none; align-items: center; gap: 6px;
+    background: var(--surface, var(--background-color-default, #ffffff));
+    color: var(--text-color-default, #1f2328);
+    border: 1px solid var(--border-color-default, #d0d7de);
+    border-radius: 6px; padding: 5px 10px;
+  }
+  button.theme-toggle:hover { border-color: var(--c-review); color: var(--c-review); }
+  .theme-glyph { font-size: 14px; line-height: 1; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .spin { animation: spin .8s linear infinite; }
@@ -111,7 +152,7 @@ export function renderHtml(options = {}) {
     border: 1px solid var(--border-color-default, #d0d7de);
     border-left: 4px solid var(--accent, var(--c-review));
     border-radius: 8px; padding: 11px 12px; margin-bottom: 10px;
-    background: var(--background-color-default, #ffffff);
+    background: var(--surface, var(--background-color-default, #ffffff));
   }
   .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .num { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--text-color-muted, #656d76); text-decoration: none; }
@@ -142,6 +183,10 @@ export function renderHtml(options = {}) {
     <span class="subtitle" id="subtitle"></span>
     <span class="spacer"></span>
     <span class="updated" id="updated"></span>
+    <button class="theme-toggle" id="theme-toggle" onclick="cycleTheme()" title="Theme" aria-label="Theme">
+      <span class="theme-glyph" aria-hidden="true">&#9681;</span>
+      <span class="theme-label">Auto</span>
+    </button>
     <button class="refresh" id="refresh" onclick="doRefresh()">
       <span class="dot" id="refresh-dot" style="background: var(--c-review);"></span>
       <span id="refresh-label">Refresh</span>
@@ -156,6 +201,63 @@ export function renderHtml(options = {}) {
     if (!CONFIG.cacheBust) return url;
     return url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now();
   }
+
+  // --- Theme (standalone website only) -----------------------------------
+  // Embedded in the Copilot App, the host injects a synced light/dark theme, so
+  // we leave theming to it. Served as a plain website there is no host, so we
+  // supply our own palette + an Auto/Light/Dark toggle (persisted). We detect
+  // "standalone" by the absence of the host's theme tokens/attributes; only then
+  // do we add the html.standalone class the dark-mode CSS above is scoped to.
+  var THEME_MODES = ["auto", "light", "dark"];
+  var THEME_GLYPH = { auto: "\u25D1", light: "\u2600", dark: "\u263D" };
+  var THEME_LABEL = { auto: "Auto", light: "Light", dark: "Dark" };
+  var themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+  var themeMode = "auto";
+  var standaloneTheme = false;
+
+  function hostThemed() {
+    function has(node) {
+      if (!node) return false;
+      if (node.hasAttribute && (node.hasAttribute("data-color-mode") || node.hasAttribute("data-theme-source"))) return true;
+      if (node.classList && node.classList.contains("pointer-on-hover")) return true;
+      var v = getComputedStyle(node).getPropertyValue("--background-color-default");
+      return !!(v && v.trim());
+    }
+    return has(document.documentElement) || has(document.body);
+  }
+  function applyTheme() {
+    if (!standaloneTheme) return;
+    var dark = themeMode === "dark" || (themeMode === "auto" && themeMedia.matches);
+    document.documentElement.classList.toggle("dark", dark);
+    var btn = document.getElementById("theme-toggle");
+    if (btn) {
+      var g = btn.querySelector(".theme-glyph");
+      var t = btn.querySelector(".theme-label");
+      if (g) g.textContent = THEME_GLYPH[themeMode];
+      if (t) t.textContent = THEME_LABEL[themeMode];
+      btn.title = "Theme: " + THEME_LABEL[themeMode];
+      btn.setAttribute("aria-label", "Theme: " + THEME_LABEL[themeMode] + " (click to change)");
+    }
+  }
+  function cycleTheme() {
+    themeMode = THEME_MODES[(THEME_MODES.indexOf(themeMode) + 1) % THEME_MODES.length];
+    try { localStorage.setItem("prTrackerTheme", themeMode); } catch (e) { /* ignore */ }
+    applyTheme();
+  }
+  function initTheme() {
+    if (hostThemed()) return; // embedded canvas: the host owns light/dark.
+    standaloneTheme = true;
+    document.documentElement.classList.add("standalone");
+    var stored = null;
+    try { stored = localStorage.getItem("prTrackerTheme"); } catch (e) { /* ignore */ }
+    if (THEME_MODES.indexOf(stored) >= 0) themeMode = stored;
+    var btn = document.getElementById("theme-toggle");
+    if (btn) btn.style.display = "inline-flex";
+    if (themeMedia.addEventListener) themeMedia.addEventListener("change", applyTheme);
+    else if (themeMedia.addListener) themeMedia.addListener(applyTheme);
+    applyTheme();
+  }
+  initTheme();
   const STATE_ACCENT = {
     "wip": "var(--c-wip)",
     "marking-ready": "var(--c-marking)",
