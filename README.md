@@ -73,6 +73,9 @@ docker compose up --build
 | `npm run test:e2e`     | Playwright E2E (requires backend running)    |
 | `npm run test:e2e:ui`  | …with the Playwright UI                      |
 
+This table mirrors `package.json` scripts; keep it and any CI/dev docs in sync
+when commands change.
+
 ## Project layout
 
 ```
@@ -100,16 +103,21 @@ tests/
 A thin, typed wrapper around `fetch` (`src/shared/api/httpClient.ts`) drives
 every backend call through an ordered interceptor pipeline:
 
-1. **Auth** — attaches `Authorization: Bearer <accessToken>` for protected
-   calls; callers on `/auth/*` pass `anonymous: true` to opt out (and
-   `/auth/refresh` additionally passes `noRefresh: true` to prevent
-   recursive refresh-on-401).
+1. **Auth** — attaches `Authorization: ****** for protected
+   calls. The flags live on `RequestOptions` in
+   `src/shared/api/httpClient.ts`: `anonymous: true` skips header injection,
+   while `noRefresh: true` only disables refresh-on-401 retry behavior (it
+   does not imply `anonymous`). Auth endpoints opt out explicitly (`/auth/*`
+   passes `anonymous: true`, and `/auth/refresh` also passes `noRefresh: true`
+   to avoid recursive refresh attempts).
 2. **Idempotency** — generates a UUIDv4 `Idempotency-Key` for `POST/PUT/DELETE`,
    memoized per logical call so retries reuse it.
 3. **ETag** — `/users` and `/leaderboards` GETs participate in an auth-scoped
    cache: store `{ etag, body, authIdentity }`; send `If-None-Match`; serve
    the cached body on `304`. Cleared on logout and `token_reused`; also
-   cleared on user-identity switch (e.g., when a different account logs in).
+   cleared in `authStore.applyTokens` when `user.value.userId !== res.userId`
+   (the concrete "identity switch" check for token responses representing a
+   different account).
 4. **Refresh** — on 401 from a protected call, a **single-flight, cross-tab**
    refresh runs through `navigator.locks` (with a localStorage-mutex
    fallback) and a `BroadcastChannel` so that multiple tabs sharing the same
