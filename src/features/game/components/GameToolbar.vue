@@ -19,6 +19,7 @@ const emit = defineEmits<{
   (e: 'hint'): void;
   (e: 'submit'): void;
   (e: 'abandon'): void;
+  (e: 'show-shortcuts'): void;
 }>();
 
 const pauseLabel = computed(() => {
@@ -62,6 +63,9 @@ const pauseLabel = computed(() => {
       </AppButton>
       <AppButton variant="danger" data-testid="btn-abandon" @click="emit('abandon')">
         Abandon
+      </AppButton>
+      <AppButton variant="ghost" data-testid="btn-shortcuts" aria-label="Keyboard shortcuts" @click="emit('show-shortcuts')">
+        ⌨ <span class="hidden sm:inline">Shortcuts</span><span class="sm:hidden">?</span>
       </AppButton>
     </div>
     <p v-if="props.mode !== GameMode.Practice" class="hint-text">

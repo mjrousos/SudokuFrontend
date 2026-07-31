@@ -23,6 +23,8 @@ describe('parseKeyEvent', () => {
     ['Backspace', { kind: 'clear' }],
     ['n', { kind: 'pencil-toggle' }],
     ['N', { kind: 'pencil-toggle' }],
+    ['?', { kind: 'help' }],
+    ['/', { kind: 'help' }],
     ['Tab', null],
     ['Enter', null],
     ['a', null],

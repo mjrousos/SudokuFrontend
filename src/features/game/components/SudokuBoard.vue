@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (e: 'digit', value: number): void;
   (e: 'clear'): void;
   (e: 'pencil-toggle'): void;
+  (e: 'help'): void;
 }>();
 
 const boardRoot = ref<HTMLElement | null>(null);
@@ -86,6 +87,8 @@ function onKeyDown(e: KeyboardEvent): void {
     emit('clear');
   } else if (action.kind === 'pencil-toggle') {
     emit('pencil-toggle');
+  } else if (action.kind === 'help') {
+    emit('help');
   }
 }
 
