@@ -120,6 +120,7 @@ function onBoardPencilToggle(): void {
 }
 
 function onBoardHelp(): void {
+  if (showCompletion.value || showAbandon.value || submittingSolution.value) return;
   showShortcuts.value = true;
 }
 
@@ -307,7 +308,7 @@ const timerLabel = computed(() => {
             @hint="requestHint"
             @submit="onSubmit"
             @abandon="askAbandon"
-            @show-shortcuts="showShortcuts = true"
+            @show-shortcuts="onBoardHelp"
           />
           <NumberPad
             :pencil-mode="pencilMode"
