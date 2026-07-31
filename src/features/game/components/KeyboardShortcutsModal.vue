@@ -9,7 +9,7 @@ const shortcuts = [
   { keys: ['1', '2', '…', '9'], description: 'Place a digit' },
   { keys: ['0', 'Del', '⌫'], description: 'Clear cell' },
   { keys: ['N', 'P'], description: 'Toggle pencil / notes mode' },
-  { keys: ['?'], description: 'Show this help' },
+  { keys: ['?', '/'], description: 'Show this help' },
 ] as const;
 </script>
 
