@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import AbandonDialog from '@/features/game/components/AbandonDialog.vue';
 import CompletionDialog from '@/features/game/components/CompletionDialog.vue';
 import GameToolbar from '@/features/game/components/GameToolbar.vue';
+import KeyboardShortcutsModal from '@/features/game/components/KeyboardShortcutsModal.vue';
 import NumberPad from '@/features/game/components/NumberPad.vue';
 import SudokuBoard from '@/features/game/components/SudokuBoard.vue';
 import AppSpinner from '@/shared/ui/AppSpinner.vue';
@@ -27,6 +28,7 @@ const pencilMode = ref(false);
 const paused = ref(false);
 const showCompletion = ref(false);
 const showAbandon = ref(false);
+const showShortcuts = ref(false);
 const submittingSolution = ref(false);
 const abandoning = ref(false);
 
@@ -115,6 +117,11 @@ async function onBoardClear(): Promise<void> {
 function onBoardPencilToggle(): void {
   if (showCompletion.value || showAbandon.value) return;
   pencilMode.value = !pencilMode.value;
+}
+
+function onBoardHelp(): void {
+  if (showCompletion.value || showAbandon.value || submittingSolution.value) return;
+  showShortcuts.value = true;
 }
 
 function togglePause(): void {
@@ -282,6 +289,7 @@ const timerLabel = computed(() => {
             @digit="onBoardDigit"
             @clear="onBoardClear"
             @pencil-toggle="onBoardPencilToggle"
+            @help="onBoardHelp"
           />
           <p v-if="paused" class="text-sm text-slate-500" data-testid="paused-banner">
             Board hidden. Resume to continue.
@@ -300,6 +308,7 @@ const timerLabel = computed(() => {
             @hint="requestHint"
             @submit="onSubmit"
             @abandon="askAbandon"
+            @show-shortcuts="onBoardHelp"
           />
           <NumberPad
             :pencil-mode="pencilMode"
@@ -330,6 +339,11 @@ const timerLabel = computed(() => {
       :pending="abandoning"
       @confirm="confirmAbandon"
       @cancel="showAbandon = false"
+    />
+
+    <KeyboardShortcutsModal
+      :open="showShortcuts"
+      @close="showShortcuts = false"
     />
   </section>
 </template>

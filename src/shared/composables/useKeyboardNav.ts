@@ -28,7 +28,8 @@ export type BoardAction =
   | { kind: 'move'; dir: DirectionKey }
   | { kind: 'digit'; value: number }
   | { kind: 'clear' }
-  | { kind: 'pencil-toggle' };
+  | { kind: 'pencil-toggle' }
+  | { kind: 'help' };
 
 export function parseKeyEvent(e: KeyboardEvent): BoardAction | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
@@ -39,5 +40,6 @@ export function parseKeyEvent(e: KeyboardEvent): BoardAction | null {
   if (/^[1-9]$/.test(k)) return { kind: 'digit', value: Number(k) };
   if (k === '0' || k === 'Delete' || k === 'Backspace') return { kind: 'clear' };
   if (k === 'n' || k === 'N' || k === 'p' || k === 'P') return { kind: 'pencil-toggle' };
+  if (k === '?' || k === '/') return { kind: 'help' };
   return null;
 }
