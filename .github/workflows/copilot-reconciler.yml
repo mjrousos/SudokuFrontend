@@ -24,7 +24,7 @@ on:
   # and the top of each hour are the worst-affected — this off-the-hour, ~15-minute cadence
   # is delivered more reliably, at the cost of a little latency.
   schedule:
-    - cron: "3,18,33,48 * * * *"
+    - cron: "3 * * * *"
   # Manual runs (from the Actions tab) default to a DRY RUN so the reported actions can be
   # reviewed safely before enabling writes. Scheduled runs perform writes.
   workflow_dispatch:
