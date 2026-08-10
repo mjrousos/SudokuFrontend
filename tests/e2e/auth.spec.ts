@@ -52,11 +52,9 @@ test.describe('Auth flows', () => {
     await expect(header.displayName).toHaveCount(0);
   });
 
-  test('authGuard redirects to /login when navigating to /play unauthenticated', async ({
-    page,
-  }) => {
+  test('authGuard allows navigating to /play unauthenticated', async ({ page }) => {
     await page.goto('/play');
-    await page.waitForURL(/\/login/);
-    expect(page.url()).toContain('redirectTo=');
+    await page.waitForURL('/play');
+    await expect(page.locator('[data-testid="anon-notice"]')).toBeVisible();
   });
 });
