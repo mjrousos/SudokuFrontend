@@ -57,18 +57,24 @@ docker compose up --build
 
 ## Available scripts
 
-| Script              | What it does                                          |
-| ------------------- | ----------------------------------------------------- |
-| `npm run dev`       | Vite dev server on <http://localhost:5173>            |
-| `npm run build`     | Type-check then production build to `dist/`           |
-| `npm run preview`   | Serve the production build locally on 5173           |
-| `npm run type-check`| `vue-tsc --noEmit`                                    |
-| `npm run lint`      | ESLint over `.ts` and `.vue`                          |
-| `npm run lint:fix`  | …with `--fix`                                         |
-| `npm run format`    | Prettier write                                        |
-| `npm test`          | Vitest run (unit + component)                         |
-| `npm run test:cov`  | …with v8 coverage to `coverage/`                      |
-| `npm run test:e2e`  | Playwright E2E (requires backend running)             |
+| Script                 | What it does                                 |
+| ---------------------- | -------------------------------------------- |
+| `npm run dev`          | Vite dev server on <http://localhost:5173>   |
+| `npm run build`        | Type-check then production build to `dist/`  |
+| `npm run preview`      | Serve the production build locally on 5173   |
+| `npm run type-check`   | `vue-tsc --noEmit`                           |
+| `npm run lint`         | ESLint over `.ts`, `.vue`, `.js`, and `.cjs` |
+| `npm run lint:fix`     | …with `--fix`                                |
+| `npm run format`       | Prettier write                               |
+| `npm run format:check` | Prettier check (no writes)                   |
+| `npm test`             | Vitest run (unit + component)                |
+| `npm run test:watch`   | Vitest in watch mode                         |
+| `npm run test:cov`     | …with v8 coverage to `coverage/`             |
+| `npm run test:e2e`     | Playwright E2E (requires backend running)    |
+| `npm run test:e2e:ui`  | …with the Playwright UI                      |
+
+This table mirrors `package.json` scripts; keep it and any CI/dev docs in sync
+when commands change.
 
 ## Project layout
 
@@ -76,9 +82,11 @@ docker compose up --build
 src/
 ├─ shared/         Cross-cutting code: HTTP client, auth plumbing, UI kit,
 │                  Sudoku domain helpers (board codec, conflict detector).
-├─ features/       One folder per feature slice (auth, game, daily,
-│                  leaderboards, profile, stats). Each contains its own
-│                  api/, store/, views/, components/.
+├─ features/       One folder per feature slice (auth, daily, game, home,
+│                  leaderboards, profile, stats). Most slices contain
+│                  api/, store/, views/, and/or components/ sub-folders;
+│                  the lightweight `home` slice keeps its views at the
+│                  top level.
 ├─ layouts/        Top-level layouts (default chrome, auth chrome).
 ├─ router/         Route table + navigation guards.
 └─ styles/         Tailwind entrypoint.
@@ -95,13 +103,21 @@ tests/
 A thin, typed wrapper around `fetch` (`src/shared/api/httpClient.ts`) drives
 every backend call through an ordered interceptor pipeline:
 
-1. **Auth** — attaches `Authorization: Bearer <accessToken>` for protected
-   calls; skipped on `/auth/*` to avoid recursion.
+1. **Auth** — attaches `Authorization: ****** for protected
+   calls. The flags live on `RequestOptions` in
+   `src/shared/api/httpClient.ts`: `anonymous: true` skips header injection,
+   while `noRefresh: true` only disables refresh-on-401 retry behavior (it
+   does not imply `anonymous`). Auth endpoints opt out explicitly (`/auth/*`
+   passes `anonymous: true`, and `/auth/refresh` also passes `noRefresh: true`
+   to avoid recursive refresh attempts).
 2. **Idempotency** — generates a UUIDv4 `Idempotency-Key` for `POST/PUT/DELETE`,
    memoized per logical call so retries reuse it.
 3. **ETag** — `/users` and `/leaderboards` GETs participate in an auth-scoped
    cache: store `{ etag, body, authIdentity }`; send `If-None-Match`; serve
-   the cached body on `304`. Cleared on login, logout, and `token_reused`.
+   the cached body on `304`. Cleared on logout and `token_reused`; also
+   cleared in `authStore.applyTokens` when `user.value.userId !== res.userId`
+   (the concrete "identity switch" check for token responses representing a
+   different account).
 4. **Refresh** — on 401 from a protected call, a **single-flight, cross-tab**
    refresh runs through `navigator.locks` (with a localStorage-mutex
    fallback) and a `BroadcastChannel` so that multiple tabs sharing the same
@@ -128,8 +144,8 @@ for instant feedback.
 Moves go through a **per-game serial queue** (`features/game/logic/moveQueue.ts`)
 so that fast keyboard input cannot race `nextMoveNumber` on the wire. The
 server's `MoveResponse.evaluation` is either `Consistent` or
-`Inconsistent` — `Inconsistent` means *"this digit conflicts with another in
-the same row/col/box"* and **not** *"this digit is wrong vs. the solution"*.
+`Inconsistent` — `Inconsistent` means _"this digit conflicts with another in
+the same row/col/box"_ and **not** _"this digit is wrong vs. the solution"_.
 The UI surfaces conflicts but only the final `POST /games/{id}/solution`
 call tells us whether the user has actually solved the puzzle.
 
@@ -183,12 +199,12 @@ Actions workflow that, on each run, executes one well-commented Node script
 non-fork PRs **authored by the Copilot coding agent** and applies the following deterministic
 scenarios per PR:
 
-| Scenario | When | What it does |
-| --- | --- | --- |
-| **Mark ready** | PR is a **draft** whose title no longer contains `[WIP]` | Marks it ready for review (`gh pr ready`) |
-| **Request review** | PR is **non-draft** with new commits since the last Copilot review (and no current re-review is in flight) | Requests the Copilot reviewer for the current head; replaces a stale duplicate request left behind by a completed review |
-| **Address review** | The latest Copilot review is for the current head and has **unresolved review threads** | Comments mentioning `@copilot` to address the feedback |
-| **Hand off to human** | The latest Copilot review is for the current head and is **clean** (no unresolved threads) | Adds the **`needs-human-review`** label and a short comment noting Copilot is done and a human should do the final review |
+| Scenario              | When                                                                                                       | What it does                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Mark ready**        | PR is a **draft** whose title no longer contains `[WIP]`                                                   | Marks it ready for review (`gh pr ready`)                                                                                 |
+| **Request review**    | PR is **non-draft** with new commits since the last Copilot review (and no current re-review is in flight) | Requests the Copilot reviewer for the current head; replaces a stale duplicate request left behind by a completed review  |
+| **Address review**    | The latest Copilot review is for the current head and has **unresolved review threads**                    | Comments mentioning `@copilot` to address the feedback                                                                    |
+| **Hand off to human** | The latest Copilot review is for the current head and is **clean** (no unresolved threads)                 | Adds the **`needs-human-review`** label and a short comment noting Copilot is done and a human should do the final review |
 
 Together they form a loop — mark ready → request review → address feedback →
 (Copilot pushes a fix) → re-review — until a review comes back clean, at which point the
@@ -208,7 +224,7 @@ draft ready and request its first review.
 **Actionable = unresolved threads (not review state).** The Copilot reviewer submits
 reviews with state `COMMENTED` even when they contain actionable inline comments, so the
 reconciler detects "changes requested" from **unresolved review threads**, not the review
-state. A review with zero unresolved threads is treated as *not* actionable for `@copilot`
+state. A review with zero unresolved threads is treated as _not_ actionable for `@copilot`
 prodding; if it is for the current head, the reconciler instead hands off to a human.
 
 **Idempotency.** Every action is gated by an idempotent predicate (draft state,
@@ -218,7 +234,7 @@ re-running every ~15 minutes never duplicates work. `@copilot` is prodded at mos
 Copilot review.
 
 **Dry run.** Manual `workflow_dispatch` runs default to `dry_run: true` — the script
-*reports* the actions it would take (and writes them to the run's job summary) without
+_reports_ the actions it would take (and writes them to the run's job summary) without
 performing any writes. Scheduled runs perform writes.
 
 **Reset:** remove the `copilot-loop-exhausted` label to resume automation on the next run.
@@ -227,7 +243,7 @@ performing any writes. Scheduled runs perform writes.
 
 GitHub does **not** run Actions automatically on events triggered by the Copilot
 coding agent — a write-access user must click **"Approve and run workflows"**.
-This gate keys on the *triggering actor* being Copilot, so it applies to both
+This gate keys on the _triggering actor_ being Copilot, so it applies to both
 `pull_request` and `pull_request_target` and **cannot** be disabled by a
 repository setting (it is separate from, and stricter than, the fork-PR approval
 setting).
@@ -243,7 +259,7 @@ All of the reconciler's writes are performed with the `GH_AW_GITHUB_TOKEN` PAT (
 write-access user), so they are attributed to that user and run without approval — and,
 crucially, an `@copilot` mention from a real user actually wakes the coding agent.
 (Copilot's own reviewer and coding-agent runs are GitHub-managed "dynamic" workflows, not
-ours, so they are never subject to *our* approval gate.)
+ours, so they are never subject to _our_ approval gate.)
 
 ### Required secret: `GH_AW_GITHUB_TOKEN`
 
@@ -284,12 +300,12 @@ state, requested reviewers, the latest Copilot review, unresolved review threads
 the `needs-human-review` / `copilot-loop-exhausted` labels) and lays the PRs out on a
 board with four columns:
 
-| Column | Meaning |
-| --- | --- |
-| **Work in progress** | Draft PR still carrying `[WIP]` — Copilot is still working |
-| **In Copilot review** | Handed to the Copilot reviewer; awaiting or processing a review |
-| **Addressing feedback** | Has unresolved review threads Copilot is working through |
-| **Ready for human review** | Review came back clean (or the loop was exhausted) — your turn |
+| Column                     | Meaning                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| **Work in progress**       | Draft PR still carrying `[WIP]` — Copilot is still working      |
+| **In Copilot review**      | Handed to the Copilot reviewer; awaiting or processing a review |
+| **Addressing feedback**    | Has unresolved review threads Copilot is working through        |
+| **Ready for human review** | Review came back clean (or the loop was exhausted) — your turn  |
 
 It is **read-only** — it never writes to PRs, so it needs only read access and never
 touches the reconciler's PAT. All the state derivation lives in one place
@@ -343,4 +359,3 @@ automatically. The **website** and **local server** add their own **Auto / Light
 toggle in the header — Auto follows your OS preference, and an explicit choice is
 remembered per browser (`localStorage`). The toggle only appears when the board is served
 standalone; it stays hidden in the canvas so the app keeps driving the theme.
-
