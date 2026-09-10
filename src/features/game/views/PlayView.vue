@@ -263,7 +263,7 @@ const timerLabel = computed(() => {
           {{ currentGame.mode }} · {{ currentGame.difficulty }}
         </h1>
         <span
-          v-if="currentGame.status !== 'InProgress'"
+          v-if="currentGame.status !== GameStatus.InProgress"
           class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide"
           data-testid="status-badge"
         >
@@ -274,10 +274,11 @@ const timerLabel = computed(() => {
       <div class="grid gap-6 md:grid-cols-[auto_1fr]">
         <div class="space-y-3">
           <SudokuBoard
+            v-if="!paused"
             :grid="currentGame.grid"
             :selected="selected"
             :pencil-mode="pencilMode"
-            :disabled="paused || currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== GameStatus.InProgress"
             @select="onSelect"
             @digit="onBoardDigit"
             @clear="onBoardClear"
@@ -302,8 +303,9 @@ const timerLabel = computed(() => {
             @abandon="askAbandon"
           />
           <NumberPad
+            v-if="!paused"
             :pencil-mode="pencilMode"
-            :disabled="paused || currentGame.status !== 'InProgress'"
+            :disabled="currentGame.status !== GameStatus.InProgress"
             @digit="applyDigit"
             @clear="applyDigit(0)"
             @pencil-toggle="pencilMode = !pencilMode"
