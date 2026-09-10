@@ -2,6 +2,7 @@
 import { RouterView } from 'vue-router';
 
 import AppHeader from '@/shared/ui/AppHeader.vue';
+import BackendVersion from '@/shared/ui/BackendVersion.vue';
 </script>
 
 <template>
@@ -11,7 +12,7 @@ import AppHeader from '@/shared/ui/AppHeader.vue';
       <RouterView />
     </main>
     <footer class="border-t border-slate-200 py-4 text-center text-xs text-slate-500 dark:border-slate-800">
-      Sudoku frontend · built with Vue 3
+      Sudoku frontend · built with Vue 3 <BackendVersion />
     </footer>
   </div>
 </template>
