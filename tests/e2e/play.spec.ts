@@ -12,8 +12,7 @@ async function signIn(page: import('@playwright/test').Page, forwardedFor: strin
 }
 
 test.describe('Game play', () => {
-  test('create practice game, enter a digit, see it on the board', async ({ page, forwardedFor }) => {
-    await signIn(page, forwardedFor);
+  test('create anonymous practice game, enter a digit, see it on the board', async ({ page }) => {
     const newGame = new NewGamePage(page);
     await newGame.goto();
     await newGame.start('Practice', 'Easy');
