@@ -23,10 +23,11 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - name: Install GitHub MCP Server
-        run: |
-          go install github.com/github/github-mcp-server/cmd/github-mcp-server@sammorrowdrums-github-app-s2s-auth
-          github-mcp-server stdio --help
+      # This should no longer be necessary as GH MCP Server fixes have merged into main
+      # - name: Install GitHub MCP Server
+      #   run: |
+      #     go install github.com/github/github-mcp-server/cmd/github-mcp-server@sammorrowdrums-github-app-s2s-auth
+      #     github-mcp-server stdio --help
 
       - name: Install GitHub MCP Router
         run: |
