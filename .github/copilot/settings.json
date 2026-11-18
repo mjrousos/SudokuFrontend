@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "dynamic-workflow-samples": {
+      "source": {
+        "source": "github",
+        "repo": "mjrousos/dynamic-workflow-plugin-sample"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "workflow-demo@dynamic-workflow-samples": true
+  }
+}
+
