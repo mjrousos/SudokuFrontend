@@ -228,6 +228,13 @@ export interface UserStatsDto {
   longestDailyStreak: number;
 }
 
+// ---------- Meta ----------
+
+/** Shape of `GET /api/v1/version` — the backend build/version marker. */
+export interface BackendVersionResponse {
+  version: string;
+}
+
 // ---------- ProblemDetails / errors ----------
 
 export interface ProblemDetails {
