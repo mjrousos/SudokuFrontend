@@ -5,10 +5,17 @@
         "source": "github",
         "repo": "mjrousos/dynamic-workflow-plugin-sample"
       }
+    },
+    "native-mcp-plugin-sample": {
+      "source": {
+          "source": "github",
+          "repo": "mjrousos/native-mcp-plugin-sample"
+      }
+    },
+    "enabledPlugins": {
+      "workflow-demo@dynamic-workflow-samples": true,
+      "native-mcp-plugin-sample@native-mcp-plugin-sample": true
     }
-  },
-  "enabledPlugins": {
-    "workflow-demo@dynamic-workflow-samples": true
   }
 }
 
